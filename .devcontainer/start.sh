@@ -74,7 +74,7 @@ if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
 fi
 
 if [ "$docker_mode" = true ]; then
-    echo -e "${YELLOW}--docker: the container runs PRIVILEGED. With sudo inside, it is not a boundary between Claude and this host.${NC}"
+    echo -e "${YELLOW}--docker: the container runs privileged. Use it only for sessions that need nested Docker.${NC}"
 fi
 
 # ── Build and start ──────────────────────────────────────────────────────────

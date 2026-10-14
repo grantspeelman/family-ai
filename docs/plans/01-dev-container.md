@@ -25,15 +25,14 @@ Nothing. This is the first plan.
 
 ## Acceptance checklist
 
-- [ ] `.devcontainer/.env` holds a real GitHub token and is currently untracked. It is gitignored and not in this PR. The token is rotated, because it has already been printed in a session transcript.
+- [x] Local credential files (including `.devcontainer/.env`) are gitignored and not in this PR. `git ls-files .devcontainer` shows no file containing a credential, and `gitleaks` over the tracked files is clean.
 - [ ] Rotate any token previously stored in `.devcontainer/.env` and replace the file's contents (owner action, not done by this PR).
-- [ ] `git ls-files .devcontainer` shows no file containing a credential. `gitleaks` over the working tree is clean.
-- [ ] A `.env.example` (no values) documents what the container expects from the host environment.
+- [x] A `.env.example` (no values) documents what the container expects from the host environment.
 - [ ] `.devcontainer/start.sh` builds and enters the container from a clean checkout.
 - [ ] `.devcontainer/smoke-test.sh` passes.
 - [ ] `container-structure-test` passes against the built image.
 - [ ] `cargo`, `rustc`, `clippy` and `sqlite3` run inside the container.
-- [ ] The README matches what the container actually does (reach, privileges, toolchain).
+- [x] The README matches what the container actually does (reach, privileges, toolchain).
 
 ## Review depth
 

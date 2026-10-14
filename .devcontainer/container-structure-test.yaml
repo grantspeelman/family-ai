@@ -1,7 +1,7 @@
 # .devcontainer/Dockerfile spec: the executable documentation of what the image
 # ships. Each command test asserts a pinned version, so when the Dockerfile
 # changes a pin, update the matching test in the same commit; CI
-# (.github/workflows/devcontainer-ci.yml) fails otherwise.
+# (added in a later PR) fails otherwise.
 #
 # Image design:
 #   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite, gosu and Docker come

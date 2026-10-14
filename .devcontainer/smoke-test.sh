@@ -2,7 +2,7 @@
 # End-to-end check of the dev container through the same compose files start.sh
 # uses: builds for the calling user's UID, forwards a throwaway ssh-agent, runs
 # the post-start setup, then exercises nested Docker and dropping back out of it.
-# Runs in CI (.github/workflows/devcontainer-ci.yml) and locally alike. It uses
+# Runs in CI (added in a later PR) and locally alike. Needs network access to pull hello-world. It uses
 # its own compose project, a throwaway Claude config volume (never your real
 # login's) and a temporary key in a fresh agent, and removes them all on exit.
 set -euo pipefail
@@ -68,16 +68,6 @@ pass "cargo build, test, clippy and fmt work"
 
 [ "$(in_container "sqlite3 :memory: 'select 21*2'")" = 42 ] || fail "sqlite3 did not answer"
 pass "sqlite3 works"
-
-in_container 'test -x /workspace/.git/hooks/pre-commit' || fail "lefthook pre-commit hook not installed"
-pass "pre-commit hook installed"
-
-in_container '
-    set -e; git init -q /tmp/t; cp /workspace/lefthook.yml /tmp/t/; cd /tmp/t
-    git config user.email smoke@example.com; git config user.name smoke; lefthook install >/dev/null
-    printf "token = \"ghp_%s\"\n" "$(head -c 300 /dev/urandom | tr -dc A-Za-z0-9 | head -c 36)" > leak.txt
-    git add leak.txt; ! git commit -qm leak >/dev/null 2>&1' || fail "gitleaks hook let a token through"
-pass "gitleaks hook blocks a token"
 
 in_container 'docker run --rm --quiet hello-world' | grep -q 'Hello from Docker!' || fail "nested docker run failed"
 pass "nested docker run works"

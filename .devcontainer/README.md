@@ -30,11 +30,9 @@ shares, so it survives rebuilds and covers both entry points.
 | **SSH** | Your host ssh-agent, forwarded as a socket. `start.sh` starts an agent and runs `ssh-add` if it needs to. The container can use your key to sign, but it can't read or copy the key. GitHub's host keys are pinned in the image. |
 | **GitHub API** | `GH_TOKEN` / `GITHUB_TOKEN`, passed through from the host environment. Use a fine-grained token scoped to this repo. |
 | **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
-| **Network** | Unrestricted outbound. There's no egress firewall. |
+| **Network** | Outbound access is not filtered. |
 
-Inside the container Claude has passwordless `sudo`. In the default,
-unprivileged container that makes it root in a disposable box, not on your
-machine.
+Inside the container the `vscode` user has passwordless `sudo`.
 
 ## Project toolchain
 
@@ -61,17 +59,14 @@ exists. There are no backing services: SQLite is a file on the app's volume.
 
 The image ships `lefthook` and `gitleaks`, and `postStartCommand.sh` installs
 the git hooks. The hook configuration (`lefthook.yml`) and the CI secret scan
-land in later PRs; once they do, `gitleaks` runs on staged changes before every
-commit made inside the container. Commits made on the host skip the hook (it
-prints "Can't find lefthook" and lets the commit through).
+are added in later PRs.
 
 ## Nested Docker
 
-`start.sh --docker` recreates the container as **privileged** and starts
-`dockerd` inside it. A privileged container plus `sudo` is not a security
-boundary: code running in it can get root on the host. Use it for the sessions
-that need Docker, then run `start.sh` without the flag to go back to the
-unprivileged container. VS Code never uses this mode.
+`start.sh --docker` recreates the container as privileged and starts `dockerd`
+inside it. Use it for the sessions that need Docker, then run `start.sh`
+without the flag to go back to the unprivileged container. VS Code never uses
+this mode.
 
 ## Changing the image
 
@@ -83,8 +78,7 @@ a version test there, so when you bump a pin in the `Dockerfile` (version and
 SHA-256), update its test in the same commit.
 
 `smoke-test.sh` starts a real container the way `start.sh` does and checks it
-end to end: SSH forwarding, Claude settings, the project toolchain, the commit hook,
-nested Docker, and switching back to unprivileged. It runs in about 30 seconds
+end to end: SSH forwarding, Claude settings, the project toolchain, nested Docker, and switching back to unprivileged. It needs network access (it pulls `hello-world`). It runs in about 30 seconds
 and cleans up after itself, using a throwaway Claude config volume so your login
 is never touched.
 

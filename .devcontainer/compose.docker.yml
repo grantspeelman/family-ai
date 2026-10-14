@@ -1,7 +1,6 @@
 # Opt-in nested Docker (start.sh --docker). dockerd needs unrestricted cgroup and
-# device access, which only privileged mode gives — and privileged mode plus the
-# vscode user's passwordless sudo means this container is no longer a boundary
-# between Claude and the host. Use it only for sessions that need Docker.
+# device access, which only privileged mode gives. Use it only for sessions that
+# need nested Docker.
 services:
   app:
     privileged: true

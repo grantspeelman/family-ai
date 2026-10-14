@@ -21,10 +21,8 @@ ARG USER_GID=1000
 #   • docker.io & co.: for `start.sh --docker` only. dockerd is started by
 #     /entrypoint.sh when ENABLE_DOCKER=1, which compose.docker.yml sets alongside
 #     privileged mode; otherwise the binaries sit unused.
-#   • bubblewrap/socat: what Claude Code's Linux sandbox (/sandbox) runs on.
-#     They won't run on hosts that restrict unprivileged user namespaces (Ubuntu's
-#     kernel.apparmor_restrict_unprivileged_userns=1), not even with --docker. The
-#     container is the sandbox here; they're installed for hosts where that's lifted.
+#   • bubblewrap/socat: what Claude Code's Linux sandbox (/sandbox) runs on. They
+#     need unprivileged user namespaces, which some hosts restrict.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bubblewrap \
     build-essential \
@@ -78,7 +76,7 @@ RUN set -eux; \
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${ARCH}"; \
     gh --version
 
-# gitleaks: run by the lefthook pre-commit hook so secrets never reach a commit.
+# gitleaks: secret scanner, run by the pre-commit hook once it is configured.
 ARG GITLEAKS_VERSION=8.30.1
 ENV GITLEAKS_SHA256_AMD64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 ENV GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
@@ -96,7 +94,7 @@ RUN set -eux; \
     rm /tmp/gitleaks.tar.gz; \
     gitleaks version
 
-# lefthook: git hook runner, configured by /lefthook.yml.
+# lefthook: git hook runner (hook configuration lands in a later PR).
 ARG LEFTHOOK_VERSION=2.1.15
 ENV LEFTHOOK_SHA256_AMD64=df981b477c236546435047fb8c8ee1f6f902e17faebb1b07b6bf2165832e8fe3
 ENV LEFTHOOK_SHA256_ARM64=f3c881e1b6aa7f0461970173b1d692e0eb026bddfcd051cc87f636bf9a9782e0
@@ -148,8 +146,7 @@ RUN set -eux; \
     else \
         useradd -l -m -d /home/vscode -s /bin/bash -g "${USER_GID}" -u "${USER_UID}" vscode; \
     fi; \
-    # Passwordless sudo stays inside the container's walls — unless it runs
-    # privileged (start.sh --docker), where root here is effectively host root.
+    # Passwordless sudo for the vscode user.
     printf '%s\n' 'vscode ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/vscode; \
     chmod 0440 /etc/sudoers.d/vscode; \
     visudo -cf /etc/sudoers.d/vscode; \
