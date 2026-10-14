@@ -38,7 +38,7 @@ The rules to record:
 - [ ] Each workflow in the repo is listed in the PR description with a pass or fix note per rule. (The table is under "Audit" below; copying it into the PR description is left for when the PR is written.)
 - [ ] A workflow linter runs in CI and fails on a deliberate violation. Shown once, then reverted. (Needs a real CI run. Locally: `actionlint` 1.7.12 and the rules script both exited 1 on a deliberate violation of an unpinned checkout, `${{ github.head_ref }}` in `run:` and `secrets.X`, then the change was reverted and both exit 0. The `workflows` job is wired into `needs:` of `ci` but has not run in GitHub yet.)
 - [ ] The repo setting for fork-PR workflows (require approval for outside contributors) is set and the choice recorded. (Owner action. Exact steps are in `docs/github-settings.md`.)
-- [x] `grep` for `secrets.` across workflows returns nothing, or each hit is justified. (`grep -rn 'secrets\.' .github` returns nothing, apart from the pattern in the rules script that looks for it.)
+- [x] `grep` for `secrets.` across workflows returns nothing, or each hit is justified. (`grep -rn 'secrets\.' .github` returns one hit, the pattern string inside the rules script itself, which is not a workflow.)
 
 ## Review depth
 

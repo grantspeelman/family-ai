@@ -22,15 +22,21 @@ When a job is added to the workflow, add it to the `needs:` list of the `ci` job
 
 ## Require approval for workflows from outside contributors
 
-Owner action. Without this, a first-time contributor's PR runs workflows as soon as it is opened. The workflows follow the safety rules in [docs/conventions.md](conventions.md#workflow-safety), but approval means a person looks at the PR before anything runs.
+Owner action. By default GitHub already requires approval for first-time contributors, but a stricter choice is available. The workflows follow the safety rules in [docs/conventions.md](conventions.md#workflow-safety); approval means a person looks at a fork PR before anything runs.
 
 1. Repository **Settings**, then **Actions**, then **General**.
-2. Under **Fork pull request workflows from outside collaborators**, choose **Require approval for all outside collaborators** (stricter) or at least **Require approval for first-time contributors**. The owner's call; record which.
-3. Under **Workflow permissions**, choose **Read repository contents and packages permissions**, and leave **Allow GitHub Actions to create and approve pull requests** unticked.
-4. Under **Fork pull request workflows**, leave **Send write tokens to workflows from pull requests** and **Send secrets and variables to workflows from pull requests** off. These are only offered for private repos; on a public repo, fork PRs never get them.
-5. Save.
+2. Under **Approval for running fork pull request workflows from contributors**, choose one of the three options:
+   - **Require approval for first-time contributors who are new to GitHub**: the weakest.
+   - **Require approval for first-time contributors**: GitHub's default.
+   - **Require approval for all external contributors**: the strictest. Recommended while the repo is new and has few contributors, because every fork PR run is then seen by the owner first. Relax it later if the approvals become a burden.
 
-Then confirm: the settings page shows the choice you made.
+   Record which one you chose.
+3. Click **Save** for that section. Each section on this page saves on its own.
+4. Under **Workflow permissions**, choose **Read repository contents and packages permissions** and leave **Allow GitHub Actions to create and approve pull requests** unticked. Click **Save** for this section too.
+
+The **Fork pull request workflows** section (with **Send write tokens** and **Send secrets**) is shown for private repositories only. This repo is public, where fork PRs never receive secrets or write tokens, so there is nothing to set there.
+
+Then confirm: reload the page and check that both sections show the choices you made.
 
 ## Record in the PR
 
