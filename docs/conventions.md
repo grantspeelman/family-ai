@@ -8,6 +8,8 @@ Standing rules for every PR in this build. `AGENTS.md` is the entry point and co
 
 Only the secret scan (gitleaks) is a real check today. The pre-commit hook runs it, but only inside the dev container; CI scans the full history on every PR and push to main. The hook also carries placeholder steps for the checks below, which run on matching changed files and check nothing until the tools are installed. Everything else here is a convention that people and agents follow by hand until the tooling lands:
 
+Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` and `Cargo.*` files. Files of any other type, including the registry app's, are checked by the secret scan only, and are skipped by the other steps without any output.
+
 | Rule | Enforced by | Status |
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
@@ -22,14 +24,14 @@ The hook is configured in `lefthook.yml`. It is a fast local check on the files 
 
 **Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that lint, tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders.
 
-Steps run in order and stop at the first failure. Each step gets only the staged files matching its glob, through `{staged_files}`, not the whole tree.
+Steps run in order and stop at the first failure. Each step gets only the staged files matching its glob, through `{staged_files}`, not the whole tree. `{staged_files}` covers added, copied, modified and renamed files; deleted files are not passed.
 
 To add a language's checks (PRs 2 and 7), edit the matching step in `lefthook.yml`:
 
 1. Set the step's `glob` to the language's files (for example `"*.rs"`), if the placeholder's glob is not right.
 2. Replace `.lefthook/placeholder.sh ...` in `run` with the real command, passing `{staged_files}` when the tool accepts file arguments. Tools that must see the whole project (a test run, say) can ignore the file list but should still be scoped by the glob so they only run when that language changed.
 3. Keep the step fast; the hook only helps if it is not skipped. Anything slow belongs in CI.
-4. Delete the `PLACEHOLDER` comment, and update the table above and the "Running the checks" section of `AGENTS.md`.
+4. Delete the `# PLACEHOLDER` comment above the step, and update the table above and the "Running the checks" section of `AGENTS.md`.
 
 For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it only runs when dependencies change.
 

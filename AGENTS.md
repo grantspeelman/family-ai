@@ -31,7 +31,7 @@ Work happens in the dev container, where the tools and the commit hook are insta
 
 ## Running the checks
 
-Today the only real automated check is the secret scan. The hook also has placeholder steps for lint, tests, duplication and complexity, and `cargo-deny`; they run on matching changed files, print that they are placeholders and check nothing, until PRs 2 and 7 install the tools. Inside the container:
+Today the only real automated check is the secret scan. The hook also has placeholder steps for lint, tests, duplication and complexity, and `cargo-deny`; they run on matching changed files, print that they are placeholders and check nothing, until PRs 2 and 7 install the tools. Until PR 2 and PR 7 add their globs, these steps cover only `.rs` and `Cargo.*` files. Files of any other type, including the registry app's, are checked by the secret scan only, and are skipped by the other steps without any output. Inside the container:
 
 ```
 lefthook run pre-commit                                          # what the commit hook runs

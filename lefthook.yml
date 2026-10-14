@@ -6,7 +6,11 @@
 # failure (piped: true).
 #
 # Steps marked PLACEHOLDER call .lefthook/placeholder.sh, which prints that no
-# check ran. To add a language's checks, see docs/conventions.md.
+# check ran. Until PR 2 and PR 7 add their globs, only .rs and Cargo.* files are
+# covered by these steps; any other file type is checked by the secret scan only
+# and is skipped by the other steps without output. {staged_files} covers
+# added, copied, modified and renamed files; deleted files are not passed.
+# To add a language's checks, see docs/conventions.md.
 pre-commit:
   piped: true
   commands:
