@@ -26,7 +26,7 @@ A commit containing a secret is blocked on the developer's machine before it exi
 - [x] After container start, `.git/hooks/pre-commit` exists and calls lefthook.
 - [x] Staging a file with a fake token and running `git commit` fails, with the finding redacted in the output. Shown once, then reverted.
 - [x] Staging a clean change commits normally.
-- [x] Any allowlist entry has a comment saying why it is safe.
+- [x] Any allowlist entry has a comment saying why it is safe. (No allowlist or gitleaks config was needed, so there are no entries.)
 - [x] The README says what happens for commits made outside the container (the hook is skipped; CI is the backstop).
 
 ## Review depth

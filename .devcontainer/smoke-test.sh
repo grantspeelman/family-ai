@@ -76,8 +76,15 @@ in_container '
     set -e; git init -q /tmp/t; cp /workspace/lefthook.yml /tmp/t/; cd /tmp/t
     git config user.email smoke@example.com; git config user.name smoke; lefthook install >/dev/null
     printf "token = \"ghp_%s\"\n" "$(head -c 300 /dev/urandom | tr -dc A-Za-z0-9 | head -c 36)" > leak.txt
-    git add leak.txt; ! git commit -qm leak >/dev/null 2>&1' || fail "gitleaks hook let a token through"
+    git add leak.txt
+    if out="$(git commit -qm leak 2>&1)"; then echo "commit succeeded" >&2; exit 1; fi
+    printf "%s\n" "$out" | grep -q "leaks found"' || fail "gitleaks hook did not block a token"
 pass "gitleaks hook blocks a token"
+
+in_container '
+    set -e; cd /tmp/t; git rm -qf --cached leak.txt; rm leak.txt
+    echo clean > ok.txt; git add ok.txt; git commit -qm clean >/dev/null 2>&1' || fail "clean change was not committed"
+pass "clean change commits normally"
 
 in_container 'docker run --rm --quiet hello-world' | grep -q 'Hello from Docker!' || fail "nested docker run failed"
 pass "nested docker run works"
