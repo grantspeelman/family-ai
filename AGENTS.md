@@ -14,8 +14,8 @@ family-ai is a public repo (AGPL-3.0). The one non-negotiable rule is in `CLAUDE
 | `.env.example` | Names of host environment variables the container reads, no values. Real `.env` files are gitignored and never committed. |
 | `lefthook.yml` | Git hook configuration (secret scan and changed-files checks before each commit). |
 | `.lefthook/` | Helper scripts the hook calls (currently the placeholder step). |
-| `.github/workflows/` | CI. Workflows follow the [workflow safety rules](docs/conventions.md#workflow-safety); `.github/scripts/check-workflow-rules.py` checks the mechanical ones. |
-| `docs/github-settings.md` | GitHub settings the owner applies by hand (branch protection, fork PR approval, secret scanning and push protection). |
+| `.github/workflows/` | CI. Workflows follow the [workflow safety rules](docs/conventions.md#workflow-safety); `.github/scripts/check-workflow-rules.py` checks the mechanical ones. `.github/dependabot.yml` configures Dependabot version updates. |
+| `docs/github-settings.md` | GitHub settings the owner applies by hand (branch protection, fork PR approval, secret scanning and push protection, Dependabot alerts and security updates). |
 
 There is no application code yet. Language and framework rules arrive with the PRs that introduce those stacks.
 

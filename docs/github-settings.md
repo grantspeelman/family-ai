@@ -1,6 +1,6 @@
 # GitHub settings checklist
 
-Settings that live in GitHub, not in the repo, so a PR cannot apply them. The repo owner applies them by hand. This page is the exact list for the CI gate, fork PR approval and secret scanning; other plans add their own sections.
+Settings that live in GitHub, not in the repo, so a PR cannot apply them. The repo owner applies them by hand. This page is the exact list for the CI gate, fork PR approval, secret scanning and Dependabot; other plans add their own sections.
 
 ## Require the CI gate before merging to `main`
 
@@ -77,6 +77,33 @@ Do these in order. Rotation comes first because anything pushed to a public repo
 4. Resolve the GitHub secret scanning alert, marking it as revoked, and note what was rotated in the PR or issue without writing the secret itself.
 
 Push protection blocks are not leaks, since nothing reached GitHub. Remove the secret from the commit and push again. If a block is a false positive, use the bypass option with the reason GitHub asks for, rather than leaving it unexplained.
+
+## Dependabot alerts and security updates
+
+Owner action. `.github/dependabot.yml` (version updates, covered in [docs/conventions.md](conventions.md#dependency-updates-dependabot)) is in the repo and needs no setting. These two are separate, repo-level settings: alerts tell you when a dependency has a known advisory, and security updates open a PR to fix it. The PRs follow the same rules as any other: reviewed, no auto-merge, `ci` must pass.
+
+Availability, checked 2026-10-14 against GitHub's pages:
+
+- [GitHub's pricing page](https://github.com/pricing) lists "Dependabot security and version updates" on the Free plan, and [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans) gives Free "unlimited collaborators on unlimited public repositories with a full feature set".
+- [About billing for GitHub Actions](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions) says standard GitHub-hosted runners are free for Dependabot and for public repositories.
+- The pages on enabling alerts and security updates state no price for public repos. The pricing page is marketing copy, not a terms document; if any **Enable** button shows a price or a billing prompt, stop and check again.
+
+Steps (GitHub's current wording; go by the pages [Configuring Dependabot alerts](https://docs.github.com/en/code-security/dependabot/dependabot-alerts/configuring-dependabot-alerts) and [Configuring Dependabot security updates](https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/configuring-dependabot-security-updates) if the sidebar differs):
+
+1. Repository main page, then **Settings** (if it is hidden, open the **...** menu).
+2. In the **Security and quality** section of the sidebar, click **Advanced Security**.
+3. Next to **Dependabot alerts**, click **Enable**.
+4. Next to **Dependabot security updates**, click **Enable**. For public repos the button can be disabled when GitHub has the feature always on; that counts as enabled.
+
+Then confirm: reload **Advanced Security** and check that both show as enabled. After the `dependabot.yml` PR is on the default branch, open **Insights**, then **Dependency graph**, then **Dependabot** and check that both ecosystems are listed with no parsing error (GitHub parses the file only once it is on the default branch).
+
+Record it:
+
+| Setting | Turned on by | Date |
+| --- | --- | --- |
+| Dependabot alerts | | |
+| Dependabot security updates | | |
+| `dependabot.yml` parsed with no error | | |
 
 ## Record in the PR
 

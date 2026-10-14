@@ -1,6 +1,6 @@
 # 10 — Dependabot
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -26,12 +26,12 @@ Dependency and action updates and security advisories arrive as PRs without anyo
 
 ## Acceptance checklist
 
-- [ ] `dependabot.yml` is valid; GitHub's Dependabot page shows no parsing error.
-- [ ] It covers `github-actions` and `docker` for `.devcontainer/`.
-- [ ] Open-PR limits are set.
-- [ ] Dependabot alerts and security updates show as enabled; evidence is in the PR description.
-- [ ] The conventions document says new ecosystems get a `dependabot.yml` entry in the PR that adds them.
-- [ ] Confirmed against GitHub's current terms that Dependabot is free for public repos, with the date checked.
+- [ ] `dependabot.yml` is valid; GitHub's Dependabot page shows no parsing error. (Valid YAML and keys checked against GitHub's options reference locally; needs GitHub to parse it after merge/push.)
+- [x] It covers `github-actions` and `docker` for `.devcontainer/`.
+- [x] Open-PR limits are set.
+- [ ] Dependabot alerts and security updates show as enabled; evidence is in the PR description. (Owner action: steps are in `docs/github-settings.md`.)
+- [x] The conventions document says new ecosystems get a `dependabot.yml` entry in the PR that adds them.
+- [x] Confirmed against GitHub's current terms that Dependabot is free for public repos, with the date checked. (2026-10-14; sources in `docs/github-settings.md`.)
 
 ## Review depth
 

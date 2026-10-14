@@ -1,0 +1,27 @@
+# Dependabot version updates. Every update arrives as a PR that must pass the `ci`
+# gate and be reviewed; nothing is auto-merged. See docs/conventions.md, "Dependency
+# updates (Dependabot)", for what is and is not covered, and the rule that a PR
+# adding a new ecosystem adds its entry here in the same PR.
+version: 2
+updates:
+  # Actions in .github/workflows/. Dependabot reads `uses: owner/action@<sha> # vX.Y.Z`
+  # and updates the SHA and the version comment together.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+
+  # The dev container image. Only the `FROM` line of the Dockerfile is updated;
+  # the tool pins in its ARG/ENV lines are maintained by hand.
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "devcontainer"
