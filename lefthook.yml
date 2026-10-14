@@ -1,5 +1,34 @@
 # Installed into .git/hooks by .devcontainer/postStartCommand.sh.
+#
+# Every step runs only on the staged files that match its glob, passed in as
+# {staged_files}. A step with no matching files is skipped. A step that exits
+# non-zero blocks the commit. Steps run one after another and stop at the first
+# failure (piped: true).
+#
+# Steps marked PLACEHOLDER call .lefthook/placeholder.sh, which prints that no
+# check ran. To add a language's checks, see docs/conventions.md.
 pre-commit:
+  piped: true
   commands:
-    gitleaks:
+    1-gitleaks:
       run: gitleaks git --pre-commit --staged --redact --no-banner --verbose
+
+    # PLACEHOLDER until PR 7 installs clippy (PR 2 for the registry app's language).
+    2-lint:
+      glob: "*.rs"
+      run: .lefthook/placeholder.sh lint "PR 7" {staged_files}
+
+    # PLACEHOLDER until PR 7 (PR 2 for the registry app).
+    3-test:
+      glob: "*.rs"
+      run: .lefthook/placeholder.sh test "PR 7" {staged_files}
+
+    # PLACEHOLDER until PR 7 (PR 2 for the registry app).
+    4-duplication-complexity:
+      glob: "*.rs"
+      run: .lefthook/placeholder.sh duplication-and-complexity "PR 7" {staged_files}
+
+    # PLACEHOLDER until PR 7 installs cargo-deny. Runs only when a manifest or lockfile changes.
+    5-cargo-deny:
+      glob: "{Cargo.toml,Cargo.lock,**/Cargo.toml,**/Cargo.lock}"
+      run: .lefthook/placeholder.sh cargo-deny "PR 7" {staged_files}

@@ -6,15 +6,32 @@ Standing rules for every PR in this build. `AGENTS.md` is the entry point and co
 
 ## What is enforced today
 
-Only the secret scan (gitleaks). The pre-commit hook runs it, but only inside the dev container; CI scans the full history on every PR and push to main. Everything else here is a convention that people and agents follow by hand until the tooling lands:
+Only the secret scan (gitleaks) is a real check today. The pre-commit hook runs it, but only inside the dev container; CI scans the full history on every PR and push to main. The hook also carries placeholder steps for the checks below, which run on matching changed files and check nothing until the tools are installed. Everything else here is a convention that people and agents follow by hand until the tooling lands:
 
 | Rule | Enforced by | Status |
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
-| Lint, tests, duplication and complexity on changed files | Pre-commit hook | Plan 06, not yet |
+| Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
 | Full test suite as the merge gate | CI | Plan 07, not yet |
 | Dependency license check, registry app | CI | PR 2, not yet |
-| Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | PR 7, not yet |
+| Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
+
+## Pre-commit hook: what passing means, and adding a language
+
+The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI runs the full suite and is the real gate.
+
+**Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that lint, tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders.
+
+Steps run in order and stop at the first failure. Each step gets only the staged files matching its glob, through `{staged_files}`, not the whole tree.
+
+To add a language's checks (PRs 2 and 7), edit the matching step in `lefthook.yml`:
+
+1. Set the step's `glob` to the language's files (for example `"*.rs"`), if the placeholder's glob is not right.
+2. Replace `.lefthook/placeholder.sh ...` in `run` with the real command, passing `{staged_files}` when the tool accepts file arguments. Tools that must see the whole project (a test run, say) can ignore the file list but should still be scoped by the glob so they only run when that language changed.
+3. Keep the step fast; the hook only helps if it is not skipped. Anything slow belongs in CI.
+4. Delete the `PLACEHOLDER` comment, and update the table above and the "Running the checks" section of `AGENTS.md`.
+
+For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it only runs when dependencies change.
 
 ## Working principles
 
@@ -22,7 +39,7 @@ These apply to every PR, not just the foundation ones.
 
 1. **Start from a written spec.** Each PR starts from its plan (a short spec and checklist). The agent restates the goal, scope and checklist and confirms it understands before touching code.
 2. **Decide review depth per PR, and size the PR by it.** Each plan says whether it needs a close read or a skim (see sizing below).
-3. **The agent runs the tests itself and shows them passing** before marking a PR done. The pre-commit hook will back this up automatically once plan 06 lands; until then the agent does not rely on memory.
+3. **The agent runs the tests itself and shows them passing** before marking a PR done. The pre-commit hook backs this up on changed files; it does not replace running the tests, and CI is the real gate.
 4. **Keep PRs small enough for a quick loop.** Rust compile times are slow, so large PRs make the test-fix-retest loop painful for the agent.
 
 ## Sizing rule

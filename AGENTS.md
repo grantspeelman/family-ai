@@ -12,7 +12,8 @@ family-ai is a public repo (AGPL-3.0). The one non-negotiable rule is in `CLAUDE
 | `first-build-pr-sequence.md` (repo root) | The overall PR sequence and the working notes behind it. |
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
 | `.env.example` | Names of host environment variables the container reads, no values. Real `.env` files are gitignored and never committed. |
-| `lefthook.yml` | Git hook configuration (secret scan before each commit). |
+| `lefthook.yml` | Git hook configuration (secret scan and changed-files checks before each commit). |
+| `.lefthook/` | Helper scripts the hook calls (currently the placeholder step). |
 | `.github/workflows/` | CI. |
 
 There is no application code yet. Language and framework rules arrive with the PRs that introduce those stacks.
@@ -30,14 +31,14 @@ Work happens in the dev container, where the tools and the commit hook are insta
 
 ## Running the checks
 
-Today the only automated check is the secret scan. Inside the container:
+Today the only real automated check is the secret scan. The hook also has placeholder steps for lint, tests, duplication and complexity, and `cargo-deny`; they run on matching changed files, print that they are placeholders and check nothing, until PRs 2 and 7 install the tools. Inside the container:
 
 ```
 lefthook run pre-commit                                          # what the commit hook runs
-gitleaks git --pre-commit --staged --redact --no-banner --verbose   # the scan itself, on staged changes
+gitleaks git --pre-commit --staged --redact --no-banner --verbose   # the secret scan itself, on staged changes
 ```
 
-The two commands are the same check; the first runs the second through the hook configuration. If the hook blocks a commit, fix or remove the finding. Never bypass it with `--no-verify`; any allowlist entry needs a written reason.
+The first command runs the whole hook (secret scan first, then each other step on the staged files that match its glob) through the hook configuration; the second is the secret scan alone. A step that exits non-zero blocks the commit. If the hook blocks a commit, fix or remove the finding. Never bypass it with `--no-verify`; any allowlist entry needs a written reason. How to add a language's checks is in [docs/conventions.md](docs/conventions.md#pre-commit-hook-what-passing-means-and-adding-a-language).
 
 The hook is installed into `.git/hooks` by `.devcontainer/postStartCommand.sh`, so it runs on every commit made inside the container. Commits outside the container skip it; CI is the backstop.
 
