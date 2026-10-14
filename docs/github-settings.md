@@ -85,7 +85,7 @@ Owner action. `.github/dependabot.yml` (version updates, covered in [docs/conven
 Availability, checked 2026-10-14 against GitHub's pages:
 
 - [GitHub's pricing page](https://github.com/pricing) lists "Dependabot security and version updates" on the Free plan, and [GitHub's plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans) gives Free "unlimited collaborators on unlimited public repositories with a full feature set".
-- [About billing for GitHub Actions](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions) says standard GitHub-hosted runners are free for Dependabot and for public repositories.
+- Side point only, about Actions billing and not about whether Dependabot is free: [About billing for GitHub Actions](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions) says standard GitHub-hosted runners are free for Dependabot and for public repositories.
 - The pages on enabling alerts and security updates state no price for public repos. The pricing page is marketing copy, not a terms document; if any **Enable** button shows a price or a billing prompt, stop and check again.
 
 Steps (GitHub's current wording; go by the pages [Configuring Dependabot alerts](https://docs.github.com/en/code-security/dependabot/dependabot-alerts/configuring-dependabot-alerts) and [Configuring Dependabot security updates](https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/configuring-dependabot-security-updates) if the sidebar differs):

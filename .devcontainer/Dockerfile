@@ -1,5 +1,5 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
-# Ubuntu LTS, matching the host OS. Most tools come from its archive; only gh and
+# Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; only gh and
 # gitleaks, whose archive versions are too old, are fetched as pinned binaries below.
 FROM ubuntu:26.04
 
