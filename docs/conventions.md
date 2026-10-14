@@ -2,9 +2,11 @@
 
 Standing rules for every PR in this build. `AGENTS.md` is the entry point and covers the mechanics (container, checks, per-PR steps). This document covers the principles behind them. Where something is not decided yet, it says so.
 
+"PR N" means the Nth PR in the build sequence in `first-build-pr-sequence.md`. "Plan NN" means the numbered plan in `docs/plans/`. They are different numberings: for example PR 7 is the family app tooling, while plan 07 is the CI gate.
+
 ## What is enforced today
 
-Only the secret scan (gitleaks, run by the pre-commit hook and in CI). Everything else here is a convention that people and agents follow by hand until the tooling lands:
+Only the secret scan (gitleaks). The pre-commit hook runs it, but only inside the dev container; CI scans the full history on every PR and push to main. Everything else here is a convention that people and agents follow by hand until the tooling lands:
 
 | Rule | Enforced by | Status |
 | --- | --- | --- |
@@ -29,11 +31,11 @@ Size a PR by how much human attention it needs, not by a fixed line count.
 
 - Boilerplate-heavy, low-judgement work (scaffolding, generated tooling config) may be larger. It is skimmed.
 - Work with real judgement calls stays small and is read line by line: API contracts, data handling, security-adjacent code.
-- This is a standing step throughout the build. PRs likely to be bundles (the registry tooling in PR 2, the family app tooling in PR 7) are broken down live before starting, not pre-cut.
+- This rule applies to every PR. The two PRs flagged as likely bundles (PR 2, registry app tooling, and PR 7, family app tooling) are broken down live before starting, not pre-cut.
 
 ## Licensing
 
-The repo is AGPL-3.0; the `LICENSE` file is committed. Confirming the license as final is still listed as pending in `first-build-pr-sequence.md`.
+The `LICENSE` file is AGPL-3.0 and committed. `first-build-pr-sequence.md` still calls AGPL-3.0 a leaning, not final. Treat it as in place but not confirmed.
 
 **Dependency license policy.** An agent will add whatever dependency makes the tests pass, so the check is mechanical, not remembered.
 
@@ -46,6 +48,8 @@ Disallowed:
 - GPL-2.0-only
 - Proprietary libraries
 - Source-available licenses with usage restrictions: SSPL, BSL, Elastic, FSL, O'Saasy
+
+Licenses on neither list (LGPL, MPL, GPL-3.0 and so on): not yet decided. Ask the user before adding such a dependency.
 
 Scope: dependencies linked into shipped code. Dev tooling (linters, coverage, CI) is not linked into shipped code and is out of scope.
 

@@ -58,7 +58,7 @@ Plans are numbered. Each builds on the plans listed under its "Builds on", and e
 
 ## Conventions
 
-Working principles, the sizing rule, the dependency license policy and commit and PR conventions are in [docs/conventions.md](docs/conventions.md). It also says which rules are enforced today (only the secret scan) and which wait on later plans.
+Working principles, the sizing rule, the dependency license policy and commit and PR conventions are in [docs/conventions.md](docs/conventions.md). It also says which rules are enforced today and which wait on later plans.
 
 ## Claude Code settings
 
