@@ -2,7 +2,7 @@
 # End-to-end check of the dev container through the same compose files start.sh
 # uses: builds for the calling user's UID, forwards a throwaway ssh-agent, runs
 # the post-start setup, then exercises nested Docker and dropping back out of it.
-# Runs in CI (added in a later PR) and locally alike. Needs network access to pull hello-world. It uses
+# Runs in CI and locally alike. Needs network access to pull hello-world. It uses
 # its own compose project, a throwaway Claude config volume (never your real
 # login's) and a temporary key in a fresh agent, and removes them all on exit.
 set -euo pipefail

@@ -87,4 +87,4 @@ hook, nested Docker, and switching back to unprivileged. It needs network access
 (it pulls `hello-world`). It runs in about 30 seconds and cleans up after
 itself, using a throwaway Claude config volume so your login is never touched.
 
-A later PR adds CI that runs both on every push to `main` and every PR.
+CI (`.github/workflows/devcontainer-ci.yml`) runs both on every push to `main` and every PR.
