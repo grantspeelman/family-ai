@@ -46,15 +46,17 @@ Availability, checked 2026-10-14 against GitHub's docs:
 
 - [About secret scanning](https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning) says that for public repositories "Secret scanning runs automatically for free."
 - [Enabling secret scanning for your repository](https://docs.github.com/en/code-security/secret-scanning/enabling-secret-scanning-features/enabling-secret-scanning-for-your-repository) says secret scanning alerts "can be enabled on any free public repository that you own."
-- [About GitHub Advanced Security](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security) has a comparison table that marks both secret scanning and push protection as available on public repositories without a paid GitHub Secret Protection plan.
-- The push protection pages do not state a price for public repos, and the repo-level steps page mentions "Secret Protection" as a prerequisite toggle. Read that as the name of the settings section for public repos, not a paid plan, but if any **Enable** button shows a price or a billing prompt, stop and check the docs again.
+- [About GitHub Advanced Security](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security) has a comparison table with a "Public repository without GitHub Secret Protection" column that shows both secret scanning and push protection as "Yes". That table is the authority for push protection on public repos. "Secret Protection" is just the name of the settings section there, not a paid plan.
+- Weaker evidence: the push protection pages themselves state no price for public repos. If any **Enable** button shows a price or a billing prompt, stop and check the docs again.
 
 Steps (GitHub's current wording; the sidebar names change now and then, so go by the page above if they differ):
 
 1. Repository main page, then **Settings** (under the repo name; if it is hidden, open the **...** menu).
 2. In the **Security and quality** section of the sidebar, click **Advanced Security**.
-3. Next to **Secret Protection**, click **Enable**, then confirm with **Enable Secret Protection** if asked. This turns on secret scanning.
+3. If Secret Protection is not already enabled, click **Enable** next to **Secret Protection**, then confirm with **Enable Secret Protection** if asked. This turns on secret scanning. If it already shows as enabled, go on to step 4.
 4. In the **Secret Protection** section, next to **Push protection**, click **Enable**.
+
+Secret scanning may already be on by default for public repos, so step 3 can be a no-op. The record table below still needs filling in either way (who confirmed or enabled it, and when).
 
 Then confirm: reload **Advanced Security** and check that both show as enabled. A read-only check with `gh api repos/OWNER/REPO --jq .security_and_analysis` also shows `secret_scanning` and `secret_scanning_push_protection` as `enabled` (it needs repo admin access).
 
@@ -78,4 +80,4 @@ Push protection blocks are not leaks, since nothing reached GitHub. Remove the s
 
 ## Record in the PR
 
-The PR description for the change that adds the gate records which of these settings were applied and when.
+The PR for each owner-applied setting records what was applied and when.
