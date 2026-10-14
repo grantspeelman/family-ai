@@ -1,6 +1,6 @@
 # 09 — GitHub secret scanning and push protection
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -23,10 +23,10 @@ GitHub itself blocks pushes containing known secret formats and alerts on any th
 
 ## Acceptance checklist
 
-- [ ] Secret scanning and push protection show as enabled in the repo's security settings. A screenshot or `gh api` output is in the PR description.
-- [ ] A short document lists the settings, who turned them on, and the date.
-- [ ] The leak-response note says to rotate the credential before anything else.
-- [ ] Confirmed against GitHub's current terms that these features are free for public repos, with the date checked.
+- [ ] Secret scanning and push protection show as enabled in the repo's security settings. A screenshot or `gh api` output is in the PR description. Unticked: owner action (steps in `docs/github-settings.md`).
+- [ ] A short document lists the settings, who turned them on, and the date. Settings and steps are in `docs/github-settings.md`; the who/date table is unticked: owner action, the owner fills it in.
+- [x] The leak-response note says to rotate the credential before anything else.
+- [x] Confirmed against GitHub's current terms that these features are free for public repos, with the date checked. Checked 2026-10-14; sources and wording in `docs/github-settings.md`.
 
 ## Review depth
 

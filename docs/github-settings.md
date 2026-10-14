@@ -1,6 +1,6 @@
 # GitHub settings checklist
 
-Settings that live in GitHub, not in the repo, so a PR cannot apply them. The repo owner applies them by hand. This page is the exact list for the CI gate; other plans add their own sections.
+Settings that live in GitHub, not in the repo, so a PR cannot apply them. The repo owner applies them by hand. This page is the exact list for the CI gate, fork PR approval and secret scanning; other plans add their own sections.
 
 ## Require the CI gate before merging to `main`
 
@@ -37,6 +37,44 @@ Owner action. By default GitHub already requires approval for first-time contrib
 The **Fork pull request workflows** section (with **Send write tokens** and **Send secrets**) is shown for private repositories only. This repo is public, where fork PRs never receive secrets or write tokens, so there is nothing to set there.
 
 Then confirm: reload the page and check that both sections show the choices you made.
+
+## Secret scanning and push protection
+
+Owner action. The local hook and the CI history scan are covered in [AGENTS.md](../AGENTS.md#running-the-checks). These two settings are the remote layer: GitHub blocks a push that contains a known secret format, and alerts on any that get through. They still work for commits made outside the dev container, where the local hook never runs.
+
+Availability, checked 2026-10-14 against GitHub's docs:
+
+- [About secret scanning](https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning) says that for public repositories "Secret scanning runs automatically for free."
+- [Enabling secret scanning for your repository](https://docs.github.com/en/code-security/secret-scanning/enabling-secret-scanning-features/enabling-secret-scanning-for-your-repository) says secret scanning alerts "can be enabled on any free public repository that you own."
+- [About GitHub Advanced Security](https://docs.github.com/en/get-started/learning-about-github/about-github-advanced-security) has a comparison table that marks both secret scanning and push protection as available on public repositories without a paid GitHub Secret Protection plan.
+- The push protection pages do not state a price for public repos, and the repo-level steps page mentions "Secret Protection" as a prerequisite toggle. Read that as the name of the settings section for public repos, not a paid plan, but if any **Enable** button shows a price or a billing prompt, stop and check the docs again.
+
+Steps (GitHub's current wording; the sidebar names change now and then, so go by the page above if they differ):
+
+1. Repository main page, then **Settings** (under the repo name; if it is hidden, open the **...** menu).
+2. In the **Security and quality** section of the sidebar, click **Advanced Security**.
+3. Next to **Secret Protection**, click **Enable**, then confirm with **Enable Secret Protection** if asked. This turns on secret scanning.
+4. In the **Secret Protection** section, next to **Push protection**, click **Enable**.
+
+Then confirm: reload **Advanced Security** and check that both show as enabled. A read-only check with `gh api repos/OWNER/REPO --jq .security_and_analysis` also shows `secret_scanning` and `secret_scanning_push_protection` as `enabled` (it needs repo admin access).
+
+Record it:
+
+| Setting | Turned on by | Date |
+| --- | --- | --- |
+| Secret scanning | | |
+| Push protection | | |
+
+### If a secret leaks
+
+Do these in order. Rotation comes first because anything pushed to a public repo should be treated as copied the moment it lands, and rewriting history does not take it back.
+
+1. **Rotate or revoke the credential at its provider, straight away.** Issue a new one, switch whatever uses it, then revoke the old one. Do this before anything else below, including deleting the commit.
+2. Check the provider's access logs for use of the old credential since it was pushed.
+3. Only then remove it from the repo. Delete it in a new commit first. Rewriting history (for example with `git filter-repo`, then a force-push) is optional once the credential is dead, and does not remove copies in forks, clones or GitHub's cached views; GitHub Support can clear cached views for a commit.
+4. Resolve the GitHub secret scanning alert, marking it as revoked, and note what was rotated in the PR or issue without writing the secret itself.
+
+Push protection blocks are not leaks, since nothing reached GitHub. Remove the secret from the commit and push again. If a block is a false positive, use the bypass option with the reason GitHub asks for, rather than leaving it unexplained.
 
 ## Record in the PR
 
