@@ -1,6 +1,6 @@
 # 01 — Dev container
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -26,6 +26,7 @@ Nothing. This is the first plan.
 ## Acceptance checklist
 
 - [ ] `.devcontainer/.env` holds a real GitHub token and is currently untracked. It is gitignored and not in this PR. The token is rotated, because it has already been printed in a session transcript.
+- [ ] Rotate any token previously stored in `.devcontainer/.env` and replace the file's contents (owner action, not done by this PR).
 - [ ] `git ls-files .devcontainer` shows no file containing a credential. `gitleaks` over the working tree is clean.
 - [ ] A `.env.example` (no values) documents what the container expects from the host environment.
 - [ ] `.devcontainer/start.sh` builds and enters the container from a clean checkout.

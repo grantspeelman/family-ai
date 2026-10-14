@@ -1,0 +1,13 @@
+# Local secrets and environment files. Never commit these.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.devcontainer/.env
+
+# Rust build output
+target/
+
+# Editor and OS noise
+.DS_Store
