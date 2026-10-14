@@ -58,7 +58,7 @@ Plans are numbered. Each builds on the plans listed under its "Builds on", and e
 
 ## Conventions
 
-The long-form conventions and working principles arrive with [plan 05](docs/plans/05-conventions.md). The conventions document itself does not exist yet and will be linked from here when it does.
+Working principles, the sizing rule, the dependency license policy and commit and PR conventions are in [docs/conventions.md](docs/conventions.md). It also says which rules are enforced today (only the secret scan) and which wait on later plans.
 
 ## Claude Code settings
 

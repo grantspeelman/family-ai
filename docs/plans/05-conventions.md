@@ -1,6 +1,6 @@
 # 05 — Conventions and working principles
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -27,11 +27,11 @@ A conventions document (for example `docs/conventions.md`) capturing:
 
 ## Acceptance checklist
 
-- [ ] The document exists and `AGENTS.md` links to it.
-- [ ] Each principle in the PR 0 section of `first-build-pr-sequence.md` appears, or the PR description says why one was left out.
-- [ ] The dependency license policy lists allowed and disallowed licenses explicitly.
-- [ ] Nothing in it states a decision the build has not made; open items are marked as open.
-- [ ] No pricing or positioning content.
+- [x] The document exists and `AGENTS.md` links to it. (`docs/conventions.md`; linked from the Conventions section of `AGENTS.md`.)
+- [x] Each principle in the PR 0 section of `first-build-pr-sequence.md` appears, or the PR description says why one was left out. (All four are numbered under Working principles, in the order of the PR 0 list.)
+- [x] The dependency license policy lists allowed and disallowed licenses explicitly. (Allowed and Disallowed lists in the Licensing section, matching `first-build-pr-sequence.md`.)
+- [x] Nothing in it states a decision the build has not made; open items are marked as open. (CLA and front end license check are marked open; the license's final confirmation is noted as pending, as the source document says; unbuilt checks are labelled not yet.)
+- [x] No pricing or positioning content. (Only a line saying they stay out of the repo.)
 
 ## Review depth
 
