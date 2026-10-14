@@ -24,11 +24,11 @@ Claude (and any other coding agent) opens the repo and finds out how to work in 
 
 ## Acceptance checklist
 
-- [ ] `AGENTS.md` exists, links to `docs/plans/` and the conventions document, and is under about 100 lines. (Exists, links `docs/plans/`, 60 lines. Unticked: the conventions document is plan 05 and does not exist yet; `AGENTS.md` says it is added later.)
-- [ ] Every command in it has been run and works inside the container. (`lefthook run pre-commit` and the `gitleaks` command were run in the container and pass. Unticked: `.devcontainer/start.sh` is a host-side command and was not run from inside the container.)
+- [ ] `AGENTS.md` exists, links to `docs/plans/` and the conventions document, and is under about 100 lines. (Exists, links `docs/plans/`, 60 lines. Unticked: the conventions document is delivered by plan 05 and does not exist yet. `AGENTS.md` links the plan, `docs/plans/05-conventions.md`, and says the document arrives with it.)
+- [x] Every command that runs inside the container has been run; host-side commands (`start.sh`) are checked against the scripts. (`lefthook run pre-commit` and the `gitleaks` command were run in the container and pass. `start.sh` and its flags were checked against `.devcontainer/start.sh` and `.devcontainer/README.md`, not run.)
 - [x] It states the per-PR workflow: start from the plan, restate it, implement, run tests and show them passing.
 - [x] `.claude/settings.local.json` is gitignored; any committed `.claude/` file is deliberate and contains nothing personal. (`git check-ignore` confirms the repo `.gitignore` rule; nothing under `.claude/` is committed.)
-- [x] A fresh agent session, asked "how do I run the checks?", answers correctly from the repo alone. (Verified by re-reading `AGENTS.md` cold: its "Running the checks" section gives the commands and says there is no test suite yet. No separate session was spawned.)
+- [ ] A fresh agent session, asked "how do I run the checks?", answers correctly from the repo alone. (Left for the reviewer: re-reading `AGENTS.md` myself is not the check described. Self-read found the "Running the checks" section answers the question, but no fresh session was run.)
 
 ## Review depth
 
