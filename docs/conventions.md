@@ -14,7 +14,7 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
-| Full test suite as the merge gate | CI | Plan 07, not yet |
+| Merge gate: one required `ci` check over all CI jobs | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It runs the container checks, the full-history secret scan and the hook over the whole tree. Lint, tests, duplication, complexity and license checks are not wired yet (PRs 2 and 7). Requiring it in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Dependency license check, registry app | CI | PR 2, not yet |
 | Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
 

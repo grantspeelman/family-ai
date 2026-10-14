@@ -59,6 +59,19 @@ jobs:
             -v "$PWD:/repo" -w /repo "$IMAGE" \
             git --redact --no-banner --verbose .
 
+      # The commit hook's own configuration, run over every tracked file instead of
+      # only staged ones. Today this checks that lefthook.yml parses and runs, and
+      # the placeholder steps skip because no .rs or Cargo.* files exist. Once PR 2
+      # and PR 7 replace the placeholders it runs the real lint, test, duplication,
+      # complexity and cargo-deny checks over the whole tree. The hook's gitleaks
+      # step only looks at staged changes, so with nothing staged it scans nothing;
+      # the full-history scan above is the real secret check.
+      - name: Commit-hook checks (whole tree)
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            lefthook run pre-commit --all-files
+
   # Starts the container the way start.sh does and checks it behaves: SSH agent
   # forwarding, Claude settings, commit hook, project toolchain, nested Docker, and
   # dropping back to unprivileged. The runner's UID (1001) also exercises the
@@ -73,3 +86,38 @@ jobs:
 
       - name: Smoke test
         run: .devcontainer/smoke-test.sh
+
+  # The single required status check. Branch protection requires this job's name
+  # (`ci`) and nothing else, so adding or renaming jobs above never means
+  # touching the settings, as long as they are listed in needs. `if: always()`
+  # makes it run even when a needed job failed; without it a failed job would
+  # leave this one skipped, and GitHub treats a skipped required check as
+  # passing. Anything other than `success` (failed, cancelled, skipped) fails it.
+  ci:
+    name: ci
+    if: always()
+    needs: [image, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      IMAGE_RESULT: ${{ needs.image.result }}
+      SMOKE_RESULT: ${{ needs.smoke.result }}
+    steps:
+      - name: Require every needed job to have succeeded
+        run: |
+          echo "image: $IMAGE_RESULT"
+          echo "smoke: $SMOKE_RESULT"
+          {
+            echo "## CI gate"
+            echo
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| image (compose, build, structure test, full-history secret scan, hook over whole tree) | $IMAGE_RESULT |"
+            echo "| smoke | $SMOKE_RESULT |"
+            echo
+            echo "**Not wired yet (these checks do not run):** lint, tests, duplication and complexity, and dependency license checks (\`cargo-deny\`). They arrive with PR 2 (registry app) and PR 7 (family app). Until then the hook's steps for them are placeholders."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$IMAGE_RESULT" != success ] || [ "$SMOKE_RESULT" != success ]; then
+            echo "A needed job did not succeed." >&2
+            exit 1
+          fi
