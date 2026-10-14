@@ -14,7 +14,7 @@ family-ai is a public repo (AGPL-3.0). The one non-negotiable rule is in `CLAUDE
 | `.env.example` | Names of host environment variables the container reads, no values. Real `.env` files are gitignored and never committed. |
 | `lefthook.yml` | Git hook configuration (secret scan and changed-files checks before each commit). |
 | `.lefthook/` | Helper scripts the hook calls (currently the placeholder step). |
-| `.github/workflows/` | CI. |
+| `.github/workflows/` | CI. Workflows follow the [workflow safety rules](docs/conventions.md#workflow-safety); `.github/scripts/check-workflow-rules.py` checks the mechanical ones. |
 | `docs/github-settings.md` | GitHub settings the owner applies by hand (branch protection). |
 
 There is no application code yet. Language and framework rules arrive with the PRs that introduce those stacks.
@@ -43,7 +43,7 @@ The first command runs the whole hook (secret scan first, then each other step o
 
 The hook is installed into `.git/hooks` by `.devcontainer/postStartCommand.sh`, so it runs on every commit made inside the container. Commits outside the container skip it; CI is the backstop.
 
-CI runs the gate on every PR and on pushes to `main`: the job named `ci` in `.github/workflows/devcontainer-ci.yml` fails if any job it depends on fails, and is the one check meant to be required before merge (the owner sets that in GitHub, see [docs/github-settings.md](docs/github-settings.md)). Today it covers the container checks below, the full-history secret scan, and the hook's checks run over the whole tree (`lefthook run pre-commit --all-files`; the placeholder steps skip until PRs 2 and 7, and the hook's gitleaks step scans nothing there because no files are staged, so the full-history scan is the secret check). Lint, tests, duplication, complexity and dependency license checks are not wired into CI yet.
+CI runs the gate on every PR and on pushes to `main`: the job named `ci` in `.github/workflows/devcontainer-ci.yml` fails if any job it depends on fails, and is the one check meant to be required before merge (the owner sets that in GitHub, see [docs/github-settings.md](docs/github-settings.md)). Today it covers the container checks below, the workflow safety lint (`actionlint` plus `.github/scripts/check-workflow-rules.py`), the full-history secret scan, and the hook's checks run over the whole tree (`lefthook run pre-commit --all-files`; the placeholder steps skip until PRs 2 and 7, and the hook's gitleaks step scans nothing there because no files are staged, so the full-history scan is the secret check). Lint, tests, duplication, complexity and dependency license checks are not wired into CI yet.
 
 Checks for the container image itself (`.devcontainer/smoke-test.sh`, `.devcontainer/container-structure-test.yaml`) are described in `.devcontainer/README.md` and run in CI.
 
