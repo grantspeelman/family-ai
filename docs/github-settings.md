@@ -4,21 +4,21 @@ Settings that live in GitHub, not in the repo, so a PR cannot apply them. The re
 
 ## Require the CI gate before merging to `main`
 
-The workflow `.github/workflows/devcontainer-ci.yml` ends in one job named `ci`. It succeeds only if every job it depends on succeeded, so `ci` is the only status check branch protection needs to require.
+The workflow `.github/workflows/devcontainer-ci.yml` ends in one job named `ci`. It succeeds only if every job listed in its `needs:` succeeded, so `ci` is the only status check branch protection needs to require. A job added to that `needs:` list is gated automatically.
 
 The check name `ci` only appears in GitHub's search box after the workflow has run once on a PR or on `main`. Merge or open the PR that adds it first, let it run, then do the steps below.
 
-1. Repository **Settings**, then **Branches** (or **Rules**, then **Rulesets**, if using rulesets).
-2. Add a branch protection rule (or ruleset) for `main`.
-3. Tick **Require a pull request before merging**.
-4. Tick **Require status checks to pass before merging**, and **Require branches to be up to date before merging**.
-5. In the status check search, add `ci` (the job named `ci`; pick the entry from the GitHub Actions app). Add no other check.
-6. Tick **Do not allow bypassing the above settings** so it applies to admins too (optional, the owner's call).
-7. Save.
+1. Repository **Settings**, then **Branches** (classic branch protection) or **Rules**, then **Rulesets**. Use one of the two, not both.
+2. Add a rule for `main`: **Add branch protection rule** (classic) or **New branch ruleset** targeting the default branch (ruleset).
+3. Require a pull request before merging (classic: tick **Require a pull request before merging**; ruleset: enable **Require a pull request before merging**).
+4. Require status checks to pass before merging (classic: tick **Require status checks to pass before merging** and **Require branches to be up to date before merging**; ruleset: enable **Require status checks to pass** and **Require branches to be up to date before merging**).
+5. In the status check search, add `ci`. Choose the **GitHub Actions** source for it. Add no other check.
+6. Applying to admins too (optional, the owner's call). Classic: tick **Do not allow bypassing the above settings**. Ruleset: leave the bypass list empty.
+7. Save (classic) or set enforcement to **Active** and create (ruleset).
 
 Then confirm: open a PR that fails a check and see that the merge button is blocked, and that a passing PR is mergeable.
 
-When a check is added to the workflow, add it to the `needs:` list of the `ci` job. Branch protection does not change.
+When a job is added to the workflow, add it to the `needs:` list of the `ci` job. Branch protection does not change.
 
 ## Record in the PR
 

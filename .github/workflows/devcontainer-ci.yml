@@ -68,9 +68,11 @@ jobs:
       # the full-history scan above is the real secret check.
       - name: Commit-hook checks (whole tree)
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+          # --entrypoint skips the image's entrypoint, which switches user with gosu
+          # and fails when already running as the runner's UID.
+          docker run --rm --entrypoint lefthook --user "$(id -u):$(id -g)" -e HOME=/tmp \
             -v "$PWD:/repo" -w /repo "$IMAGE" \
-            lefthook run pre-commit --all-files
+            run pre-commit --all-files
 
   # Starts the container the way start.sh does and checks it behaves: SSH agent
   # forwarding, Claude settings, commit hook, project toolchain, nested Docker, and
@@ -88,11 +90,11 @@ jobs:
         run: .devcontainer/smoke-test.sh
 
   # The single required status check. Branch protection requires this job's name
-  # (`ci`) and nothing else, so adding or renaming jobs above never means
-  # touching the settings, as long as they are listed in needs. `if: always()`
-  # makes it run even when a needed job failed; without it a failed job would
-  # leave this one skipped, and GitHub treats a skipped required check as
-  # passing. Anything other than `success` (failed, cancelled, skipped) fails it.
+  # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
+  # a job added to that list is gated automatically. `if: always()` makes it run
+  # even when a needed job failed; without it a failed job would leave this one
+  # skipped, and GitHub treats a skipped required check as passing. Anything other
+  # than `success` (failed, cancelled, skipped) fails it.
   ci:
     name: ci
     if: always()
@@ -100,24 +102,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      IMAGE_RESULT: ${{ needs.image.result }}
-      SMOKE_RESULT: ${{ needs.smoke.result }}
+      NEEDS: ${{ toJSON(needs) }}
     steps:
       - name: Require every needed job to have succeeded
         run: |
-          echo "image: $IMAGE_RESULT"
-          echo "smoke: $SMOKE_RESULT"
           {
             echo "## CI gate"
             echo
             echo "| Job | Result |"
             echo "| --- | --- |"
-            echo "| image (compose, build, structure test, full-history secret scan, hook over whole tree) | $IMAGE_RESULT |"
-            echo "| smoke | $SMOKE_RESULT |"
+            jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"$NEEDS"
             echo
             echo "**Not wired yet (these checks do not run):** lint, tests, duplication and complexity, and dependency license checks (\`cargo-deny\`). They arrive with PR 2 (registry app) and PR 7 (family app). Until then the hook's steps for them are placeholders."
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$IMAGE_RESULT" != success ] || [ "$SMOKE_RESULT" != success ]; then
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if ! jq -e 'all(.[]; .result == "success")' <<<"$NEEDS" >/dev/null; then
             echo "A needed job did not succeed." >&2
             exit 1
           fi
