@@ -1,5 +1,7 @@
 # family-ai
 
+Start with [AGENTS.md](AGENTS.md). It is the single entry point for working in this repo.
+
 ## Public repo: keep security concerns private
 
 This is a public repo. Anything in a PR title or description, commit message, issue, comment, code, docs or any other place on GitHub that others can see is public.
