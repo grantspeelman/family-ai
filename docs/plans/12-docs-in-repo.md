@@ -33,7 +33,7 @@ What the public repo says about the project is a deliberate choice. Architecture
 
 ## Acceptance checklist
 
-- [x] Each existing project document has a recorded decision (committed, trimmed, or excluded) in the PR description. (Table under Decisions below, to copy into the PR description.)
+- [x] Each existing project document has a recorded decision (committed, trimmed, or excluded) in the PR description. (The Decisions table above is to be copied into the PR description.)
 - [x] A search of the committed docs for pricing and positioning content returns nothing. (Every line of `first-build-pr-sequence.md` read; a keyword search finds only the rule itself, and GitHub's own pricing pages cited in `docs/github-settings.md`. No pricing, positioning, customer or competitor names, or personal data of ours.)
 - [x] The rule is written in the conventions document and linked from `docs/README.md`.
 - [x] `git log -p` over `docs/` shows no document that was later removed for sensitivity. If one exists, it is raised in the PR. (Checked all branches: no deletions under `docs/` or of `first-build-pr-sequence.md`.)
