@@ -1,6 +1,6 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
-# Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; only gh and
-# gitleaks, whose archive versions are too old, are fetched as pinned binaries below.
+# Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; gh, gitleaks,
+# lefthook and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
 FROM ubuntu:26.04
 
 # pipefail so `curl | tar` and friends fail loudly on a broken download.
@@ -110,6 +110,25 @@ RUN set -eux; \
     echo "${SHA256}  /usr/local/bin/lefthook" | sha256sum -c -; \
     chmod +x /usr/local/bin/lefthook; \
     lefthook version
+
+# bats-core: test runner for bash scripts. Released as a source tarball only (no
+# release assets), so this is GitHub's archive of the v${BATS_VERSION} tag. It is
+# arch-independent, needs only bash, and install.sh puts it under /usr/local.
+# The helper libraries (bats-support, bats-assert) are not installed.
+# If GitHub regenerates the archive and the checksum check fails, re-verify the
+# embedded commit id (`git get-tar-commit-id`) against the tag and re-pin.
+ARG BATS_VERSION=1.14.0
+ENV BATS_SHA256=bb537b70b15b732f6d8827dd6578e3d8ce166636ce1f18ea9a074184fcce9177
+RUN set -eux; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/bats-core/bats-core/archive/refs/tags/v${BATS_VERSION}.tar.gz" \
+      -o /tmp/bats.tar.gz; \
+    echo "${BATS_SHA256}  /tmp/bats.tar.gz" | sha256sum -c -; \
+    mkdir /tmp/bats-src; \
+    tar -xzf /tmp/bats.tar.gz -C /tmp/bats-src --strip-components=1; \
+    /tmp/bats-src/install.sh /usr/local; \
+    rm -rf /tmp/bats.tar.gz /tmp/bats-src; \
+    bats --version
 
 # Claude Code floats to latest on purpose: a rebuild should give you the CLI
 # Anthropic currently ships, not one frozen when the image was first built.
