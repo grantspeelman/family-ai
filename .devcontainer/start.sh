@@ -29,8 +29,8 @@ checkout_slug="$(printf '%s' "$(basename "$PROJECT_ROOT")" | tr '[:upper:]' '[:l
 checkout_digest="$(printf '%s' "$PROJECT_ROOT" | cksum | cut -d ' ' -f 1)"
 COMPOSE_PROJECT="family-ai-${checkout_slug}-${checkout_digest}"
 SERVICE="app"
-# --env-file /dev/null: compose reads no .env file; the token only ever comes
-# from the host's environment (see load_gh_token).
+# --env-file /dev/null: compose reads no .env file. The token comes only from
+# the host file below; ${HOME} in docker-compose.yml comes from the shell.
 COMPOSE=(docker compose -p "$COMPOSE_PROJECT" --env-file /dev/null
     -f "$SCRIPT_DIR/docker-compose.yml"
     -f "$SCRIPT_DIR/compose.ssh.yml")
@@ -71,12 +71,18 @@ if [ "$(agent_status)" -eq 1 ]; then
 fi
 export HOST_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 
-# ── GitHub token: from the host environment, else the host's libsecret store ─
-# shellcheck source=host-token.sh
-source "$SCRIPT_DIR/host-token.sh"
-if ! load_gh_token; then
-    echo -e "${YELLOW}Neither GH_TOKEN nor GITHUB_TOKEN is set, and the host credential store has none: gh inside the container will be unauthenticated.${NC}"
-    echo -e "${YELLOW}To store a token (prompts for the value): secret-tool store --label=family-ai-gh service family-ai-gh${NC}"
+# ── GitHub token: docker-compose.yml reads it from a file outside the repo ───
+# Only file modes are checked here; the file is never read.
+TOKEN_FILE="$HOME/.config/family-ai/gh.env"
+if [ -f "$TOKEN_FILE" ]; then
+    token_dir_mode="$(stat -c %a "$(dirname "$TOKEN_FILE")" 2>/dev/null || true)"
+    token_file_mode="$(stat -c %a "$TOKEN_FILE" 2>/dev/null || true)"
+    if [ "$token_file_mode" != 600 ] || [ "$token_dir_mode" != 700 ]; then
+        echo -e "${YELLOW}Token file permissions: file is ${token_file_mode:-unknown} (want 600), directory is ${token_dir_mode:-unknown} (want 700). Fix: chmod 700 ~/.config/family-ai && chmod 600 ${TOKEN_FILE}${NC}"
+    fi
+else
+    echo -e "${YELLOW}No token file at ${TOKEN_FILE}: gh inside the container will be unauthenticated.${NC}"
+    echo -e "${YELLOW}To set one up, see \"GitHub token\" in .devcontainer/README.md.${NC}"
 fi
 
 if [ "$docker_mode" = true ]; then
