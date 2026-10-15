@@ -40,5 +40,6 @@ One plan per PR. Each plan is a single idea that lands as its own PR, and each b
 | 12 | [Which docs are committed](12-docs-in-repo.md) | Close read |
 | 13 | [Host-side token file](13-host-token-store.md) | Close read |
 | 14 | [bats-core](14-bats-core.md) | Skim |
+| 15 | [bats in CI](15-bats-ci.md) | Skim |
 
 The AGPL-3.0 `LICENSE` is already committed and has no plan.
