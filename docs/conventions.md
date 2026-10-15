@@ -16,6 +16,7 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
 | Merge gate: one required `ci` check over all CI jobs | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It runs the container checks, the full-history secret scan and the hook over the whole tree. The hook's gitleaks step scans nothing there (it only looks at staged files, and none are staged), so the full-history scan is the secret check. Lint, tests, duplication, complexity and license checks are not wired yet (PRs 2 and 7). Requiring it in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | CI (`workflows` job: `actionlint` and `.github/scripts/check-workflow-rules.py`) | Workflow in place (plan 08). Checks syntax, untrusted input in `run:`, SHA pins, `persist-credentials`, `secrets.`, `pull_request_target` / `workflow_run` and read-only top-level permissions. Judgement rules (per-job write permissions, a reason for each) are for the reviewer. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Bash script tests (`*.bats`) | CI (`image` job, step "Bats tests", inside the `ci` gate) | Workflow in place (plan 15). Finds every tracked `*.bats` file with `git ls-files` and runs them in the built image; fails if none are found. Not run by the pre-commit hook |
 | Dependabot version updates | `.github/dependabot.yml` | Config in place (plan 10) for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
 | CodeQL analysis (GitHub Actions workflows) | `.github/workflows/codeql.yml` | Workflow in place (plan 11), analysing the `actions` language on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:` yet. Results in the code scanning tab need the owner's settings: [docs/github-settings.md](github-settings.md) |
 | Dependency license check, registry app | CI | PR 2, not yet |
@@ -40,7 +41,7 @@ For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it o
 
 ## Testing bash scripts
 
-Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. Existing shell tests are converted in a follow-up; see [plan 14](plans/14-bats-core.md).
+Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. CI runs every tracked `*.bats` file automatically (the `image` job finds them with `git ls-files` and runs them in the built image, so the same pinned bats-core), so a new test needs no workflow change. The file must be committed (tracked) to be found, and CI fails if it finds none. See [plan 14](plans/14-bats-core.md) and [plan 15](plans/15-bats-ci.md).
 
 ## Workflow safety
 

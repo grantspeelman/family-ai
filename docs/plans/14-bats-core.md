@@ -9,7 +9,7 @@ Bash scripts in this repo are tested with bats-core, and the dev container ships
 ## Builds on
 
 - 01 — Dev container (the image and its structure test)
-- 13 — Host-side token file (`token-file-check-test.sh`, the first shell test, which this runner will replace)
+- 13 — Host-side token file (`token-file-check-test.sh`, the first shell test, which this runner replaces in plan 15)
 
 ## In scope
 

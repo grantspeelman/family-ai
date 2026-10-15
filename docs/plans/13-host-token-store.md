@@ -23,15 +23,15 @@ The GitHub token for the dev container comes from a file on the host, outside th
 
 - Any token handling inside the container beyond what `env_file` provides.
 - Credential stores (libsecret, macOS Keychain, Windows).
-- Running the mode-check test in CI. `token-file-check-test.sh` is a local check; CI does not run it.
+- Running the mode-check test in CI. It was a local check (`token-file-check-test.sh`) when this plan landed; [plan 15](15-bats-ci.md) converted it to `token-file-check.bats` and CI runs it.
 
 ## Acceptance checklist
 
 - [x] `docker compose config` resolves with the file missing (`config --quiet` with the same command and files as the CI validation step exits 0).
 - [x] With a dummy file present, `config` shows `GH_TOKEN` from the file; a `GH_TOKEN` set in the calling shell does not override it (the file is the only source). Dummy values only, output masked.
 - [x] `--env-file /dev/null` still resolves `${HOME}` (it comes from the shell).
-- [x] `token-file-check-test.sh` passes (temp dirs, dummy file): 600/700 and 400 are silent; 644 file and 755 directory warn; a symlinked file and a symlinked directory pointing at 600/700 are silent; a missing file gives the unauthenticated warning and README pointer.
-- [x] `start.sh`, `token-file-check.sh` and `token-file-check-test.sh` pass `bash -n`. (`shellcheck` is not installed here.)
+- [x] The mode-check test (then `token-file-check-test.sh`, since converted to `token-file-check.bats` by plan 15) passes (temp dirs, dummy file): 600/700 and 400 are silent; 644 file and 755 directory warn; a symlinked file and a symlinked directory pointing at 600/700 are silent; a missing file gives the unauthenticated warning and README pointer.
+- [x] `start.sh`, `token-file-check.sh` and the then-current `token-file-check-test.sh` passed `bash -n`. (`shellcheck` is not installed here.)
 - [x] `python3 .github/scripts/check-workflow-rules.py` and `lefthook run pre-commit` pass (via the commit hook).
 - [x] `postStartCommand.sh`, the Dockerfile comment and the README no longer describe a pass-through; the README says a shell-exported or `.env` token is not passed in.
 - [x] The README describes token creation (permissions, 30-day expiry, single repository), the prompted store command, renewal, the restart after a rotation, and the Compose 2.24 minimum.
