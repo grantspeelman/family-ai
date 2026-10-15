@@ -112,13 +112,15 @@ Owner action. `.github/workflows/codeql.yml` (covered in [docs/conventions.md](c
 Availability, checked 2026-10-14 against GitHub's docs:
 
 - [Configuring advanced setup for code scanning](https://docs.github.com/en/code-security/how-tos/scan-code-for-vulnerabilities/configure-code-scanning/configuring-advanced-setup-for-code-scanning) lists the eligibility requirement "It is publicly visible, or GitHub Code Security is enabled", and says "You can configure code scanning for any public repository where you have write access." So public repos need no paid licence.
-- [About code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) says a GitHub Code Security licence is needed "on private repositories" and that runs consume GitHub Actions minutes; standard GitHub-hosted runners are free for public repositories (see the billing page cited under Dependabot above).
+- [About code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) says a GitHub Code Security licence is needed "on private repositories" and that runs consume GitHub Actions minutes; standard GitHub-hosted runners are free for public repositories ([About billing for GitHub Actions](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)).
 - None of these pages says "free" in so many words for public repos; the eligibility wording above is the evidence. If any button shows a price or a billing prompt, stop and check the docs again.
 
-Steps (GitHub's current wording; go by the page above if the sidebar differs):
+Steps. The menu names below are taken from GitHub's docs (checked 2026-10-14), not from the live UI; if the UI differs, go by GitHub's page.
 
 1. Repository main page, then **Settings**, then **Advanced Security** in the **Security and quality** section.
 2. Look at the **CodeQL analysis** row. If it says default setup is on, open its menu and choose **Switch to advanced**, then **Disable CodeQL** in the pop-up. Default setup and an advanced workflow conflict: with default setup on, GitHub rejects the workflow's uploads ("Upload with CodeQL results rejected due to default setup", see [Troubleshooting SARIF uploads](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/troubleshoot-sarif-uploads/default-setup-enabled)). If the row shows nothing is set up, there is nothing to switch off. Do not choose **Set up** then **Default**.
+
+   API fallback, if the menu is not where described (needs repo admin access): `gh api -X PATCH repos/OWNER/REPO/code-scanning/default-setup -f state=not-configured`. The endpoint `PATCH /repos/{owner}/{repo}/code-scanning/default-setup` and its `state` values `configured` and `not-configured` are from [GitHub's REST docs for code scanning](https://docs.github.com/en/rest/code-scanning/code-scanning) (checked 2026-10-15); the `gh` command itself has not been run.
 3. Once the `codeql` workflow has run on `main`, open **Security**, then **Code scanning**, and check an `Analyze (actions)` analysis is listed with no configuration error.
 
 Then confirm: the check `Analyze (actions)` passes on a PR, and the code scanning tab lists the analysis for `main`. Do not add it as a required check (it is not part of the `ci` gate yet).
