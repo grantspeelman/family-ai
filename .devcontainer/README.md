@@ -41,7 +41,11 @@ The token comes from a file on the host, outside the repo:
 through `env_file` in `docker-compose.yml`, so `start.sh` and VS Code use the
 same file. The file is optional: without it the container starts and `gh` is
 unauthenticated. The long `env_file` form needs Docker Compose 2.24 or newer.
-The token is never printed.
+A `GH_TOKEN` exported in your shell or placed in `.devcontainer/.env` is no
+longer passed into the container; use the file. `${HOME}` is expanded by
+Compose from the environment it runs in, so on a non-Linux host or a
+GUI-launched VS Code it may differ from your shell's and the file may not be
+found. The token is never printed.
 
 **Create the token** (GitHub, Settings, Developer settings, Fine-grained personal
 access tokens):
@@ -131,3 +135,6 @@ itself, using a throwaway Claude config volume so your login is never touched.
 
 CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test and
 the smoke test on every push to `main` and every PR.
+
+`token-file-check-test.sh` tests the token-file mode check in `start.sh` with dummy
+files in temp dirs (including symlinks). It needs no Docker, and CI does not run it.

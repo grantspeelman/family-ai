@@ -56,7 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# GitHub CLI: authenticates from the GH_TOKEN passed through from the host.
+# GitHub CLI: authenticates from GH_TOKEN, which compose reads from ~/.config/family-ai/gh.env.
 ARG GH_VERSION=2.102.0
 ENV GH_SHA256_AMD64=bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386
 ENV GH_SHA256_ARM64=7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484

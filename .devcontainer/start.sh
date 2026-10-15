@@ -73,17 +73,11 @@ export HOST_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 
 # ── GitHub token: docker-compose.yml reads it from a file outside the repo ───
 # Only file modes are checked here; the file is never read.
-TOKEN_FILE="$HOME/.config/family-ai/gh.env"
-if [ -f "$TOKEN_FILE" ]; then
-    token_dir_mode="$(stat -c %a "$(dirname "$TOKEN_FILE")" 2>/dev/null || true)"
-    token_file_mode="$(stat -c %a "$TOKEN_FILE" 2>/dev/null || true)"
-    if [ "$token_file_mode" != 600 ] || [ "$token_dir_mode" != 700 ]; then
-        echo -e "${YELLOW}Token file permissions: file is ${token_file_mode:-unknown} (want 600), directory is ${token_dir_mode:-unknown} (want 700). Fix: chmod 700 ~/.config/family-ai && chmod 600 ${TOKEN_FILE}${NC}"
-    fi
-else
-    echo -e "${YELLOW}No token file at ${TOKEN_FILE}: gh inside the container will be unauthenticated.${NC}"
-    echo -e "${YELLOW}To set one up, see \"GitHub token\" in .devcontainer/README.md.${NC}"
-fi
+# shellcheck source=token-file-check.sh
+source "$SCRIPT_DIR/token-file-check.sh"
+check_token_file "$HOME/.config/family-ai/gh.env" | while IFS= read -r line; do
+    echo -e "${YELLOW}${line}${NC}"
+done
 
 if [ "$docker_mode" = true ]; then
     echo -e "${YELLOW}--docker: the container runs privileged. Use it only for sessions that need nested Docker.${NC}"

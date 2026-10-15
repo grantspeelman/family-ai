@@ -15,7 +15,7 @@ The GitHub token for the dev container comes from a file on the host, outside th
 
 - `docker-compose.yml` reads the file with `env_file` in the long form (`path` plus `required: false`), so a missing file breaks nothing: CI, the smoke test and contributors without a token still work. The long form needs Docker Compose 2.24 or newer.
 - No `GH_TOKEN` / `GITHUB_TOKEN` pass-through next to it. Compose resolves a pass-through from a project `.env` file too, which would shadow the file; the file is the single source.
-- `start.sh` keeps `--env-file /dev/null`. If the file is missing it warns that `gh` will be unauthenticated and points at the README. If it exists, it warns (does not fail) when the file is not mode 600 or its directory not 700. It checks modes with `stat` and never reads the file.
+- `start.sh` keeps `--env-file /dev/null`. If the file is missing it warns that `gh` will be unauthenticated and points at the README. If it exists, it warns (does not fail) when the file is not mode 600 or its directory not 700. It checks modes with `stat -L` (symlinks count as their targets; BSD `stat -f` as fallback; unknown modes are skipped), accepts 600 or stricter and 700 or stricter, and never reads the file. The check lives in `token-file-check.sh`.
 - `.env.example` says nothing token-related lives in the repo.
 - `.devcontainer/README.md` documents how to create the token, store it without shell history, renew it every 30 days and restart after a rotation.
 
@@ -23,16 +23,17 @@ The GitHub token for the dev container comes from a file on the host, outside th
 
 - Any token handling inside the container beyond what `env_file` provides.
 - Credential stores (libsecret, macOS Keychain, Windows).
-- A Docker-free test for the mode check: it is a few lines in `start.sh`, checked by hand against a temp directory.
+- Running the mode-check test in CI. `token-file-check-test.sh` is a local check; CI does not run it.
 
 ## Acceptance checklist
 
 - [x] `docker compose config` resolves with the file missing (`config --quiet` with the same command and files as the CI validation step exits 0).
 - [x] With a dummy file present, `config` shows `GH_TOKEN` from the file; a `GH_TOKEN` set in the calling shell does not override it (the file is the only source). Dummy values only, output masked.
 - [x] `--env-file /dev/null` still resolves `${HOME}` (it comes from the shell).
-- [x] The mode check in `start.sh` was run against temp directories: missing file gives the unauthenticated warning and the README pointer; 644 file in a 755 directory warns with the fix; 600 in 700 is silent.
-- [x] `start.sh` passes `bash -n`. (`shellcheck` is not installed here.)
+- [x] `token-file-check-test.sh` passes (temp dirs, dummy file): 600/700 and 400 are silent; 644 file and 755 directory warn; a symlinked file and a symlinked directory pointing at 600/700 are silent; a missing file gives the unauthenticated warning and README pointer.
+- [x] `start.sh`, `token-file-check.sh` and `token-file-check-test.sh` pass `bash -n`. (`shellcheck` is not installed here.)
 - [x] `python3 .github/scripts/check-workflow-rules.py` and `lefthook run pre-commit` pass (via the commit hook).
+- [x] `postStartCommand.sh`, the Dockerfile comment and the README no longer describe a pass-through; the README says a shell-exported or `.env` token is not passed in.
 - [x] The README describes token creation (permissions, 30-day expiry, single repository), the prompted store command, renewal, the restart after a rotation, and the Compose 2.24 minimum.
 - [ ] The CI runner's Docker Compose is 2.24 or newer. Not checked here (local Compose is 2.40.3); confirm in the first CI run.
 - [ ] With a real token file, the container builds and starts, and `gh auth status` inside is authenticated. Not run: no Docker daemon here.

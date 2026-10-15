@@ -39,7 +39,7 @@ else
 fi
 
 if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
-  echo "Neither GH_TOKEN nor GITHUB_TOKEN is set: gh (PRs, issues) is unauthenticated."
+  echo "No GitHub token in the container (see .devcontainer/README.md, GitHub token): gh (PRs, issues) is unauthenticated."
 fi
 
 if [ ! -s "${config_dir}/.credentials.json" ]; then
