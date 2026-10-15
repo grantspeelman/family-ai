@@ -59,9 +59,11 @@ jobs:
         run: |
           mapfile -d '' bats_files < <(git ls-files -z -- '*.bats')
           if [ "${#bats_files[@]}" -eq 0 ]; then
-            echo "No tracked *.bats files found; discovery is broken or the tests were removed." >&2
+            echo "no .bats files found, or git ls-files failed" >&2
             exit 1
           fi
+          # A leading ./ keeps a name that starts with - from being read as a bats option.
+          bats_files=("${bats_files[@]/#/./}")
           printf 'Running %d bats file(s):\n' "${#bats_files[@]}"
           printf '  %s\n' "${bats_files[@]}"
           docker run --rm --entrypoint bats --user "$(id -u):$(id -g)" -e HOME=/tmp \
