@@ -28,7 +28,7 @@ shares, so it survives rebuilds and covers both entry points.
 |---|---|
 | **Files** | Only this checkout, at `/workspace`. No host home directory, `~/.ssh` or `~/.claude`. |
 | **SSH** | Your host ssh-agent, forwarded as a socket. `start.sh` starts an agent and runs `ssh-add` if it needs to. The container can use your key to sign, but it can't read or copy the key. GitHub's host keys are pinned in the image. |
-| **GitHub API** | A fine-grained token for this repo only. It comes from the host's credential store (or an explicitly set `GH_TOKEN` / `GITHUB_TOKEN`), never from a file in the repo. See [GitHub token](#github-token). |
+| **GitHub API** | A fine-grained token for this repo only. It comes from the host's credential store (or an explicitly set `GH_TOKEN` / `GITHUB_TOKEN`). See [GitHub token](#github-token). |
 | **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
 | **Network** | Outbound access is not filtered. |
 
@@ -36,12 +36,14 @@ Inside the container the `vscode` user has passwordless `sudo`.
 
 ## GitHub token
 
-The token comes from the host's credential store, never from a file in the repo.
+The token comes from the host's credential store.
 At `start.sh` time, if neither `GH_TOKEN` nor `GITHUB_TOKEN` is set in your
 environment, `start.sh` looks the token up with `secret-tool` (libsecret, from
 the `libsecret-tools` package on Debian and Ubuntu) and passes it into the
 container as `GH_TOKEN`. A `GH_TOKEN` or `GITHUB_TOKEN` you set yourself always
-wins. The token is never printed. Compose reads no `.env` file.
+wins. The token is never printed. `start.sh` makes compose read no `.env` file.
+VS Code gets a token only from the environment it was launched from, not from
+the store.
 
 **Create the token** (GitHub, Settings, Developer settings, Fine-grained personal
 access tokens):
@@ -67,6 +69,9 @@ secret-tool store --label=family-ai-gh service family-ai-gh
 token on GitHub. The container takes its environment when it is created, so it
 must be restarted after a rotation: `start.sh` recreates it when the token
 changed.
+
+If the keyring is locked, `start.sh` can wait for an unlock prompt before it
+continues.
 
 If `secret-tool` is missing or has no entry, `start.sh` warns that `gh` will be
 unauthenticated and prints the store command.
@@ -127,6 +132,8 @@ hook, nested Docker, and switching back to unprivileged. It needs network access
 (it pulls `hello-world`). It runs in about 30 seconds and cleans up after
 itself, using a throwaway Claude config volume so your login is never touched.
 
-`host-token-test.sh` tests the token lookup in `start.sh` with a fake `secret-tool`. It needs no Docker and prints no token.
+CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test and
+the smoke test on every push to `main` and every PR.
 
-CI (`.github/workflows/devcontainer-ci.yml`) runs both on every push to `main` and every PR.
+`host-token-test.sh` tests the token lookup in `start.sh` with a fake
+`secret-tool`. It needs no Docker, prints no token, and CI does not run it.

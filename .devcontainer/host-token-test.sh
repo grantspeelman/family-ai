@@ -11,8 +11,8 @@ trap 'rm -rf "$tmp"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "ok - $*"; }
 
-# Each case runs in a fresh bash with a minimal PATH: $tmp/bin (the fake, when
-# wanted) plus the system tools. FAKE_MODE: value | empty | fail | none.
+# Each case runs in a fresh bash whose PATH is only $tmp/bin (the fake, when
+# wanted), so a real secret-tool on the host is never reached. FAKE_MODE: value | empty | fail | none.
 # Prints exit status, then the resulting GH_TOKEN state, never its value.
 run_case() {
     local mode="$1"; shift
@@ -29,7 +29,7 @@ esac
 FAKE
         chmod +x "$tmp/bin/secret-tool"
     fi
-    env -i PATH="$tmp/bin:/usr/bin:/bin" "$@" bash -c '
+    env -i PATH="$tmp/bin" "$@" "$BASH" -c '
         source "$1"
         rc=0; load_gh_token || rc=$?
         state=unset
@@ -50,7 +50,7 @@ check "failing lookup returns 1, no token" "$(run_case fail)" "1 unset "
 
 # Output hygiene: sourcing and calling the function prints nothing.
 run_case value >/dev/null
-out="$(env -i PATH="$tmp/bin:/usr/bin:/bin" bash -c 'source "$1"; load_gh_token' _ "$SCRIPT_DIR/host-token.sh" 2>&1 || true)"
+out="$(env -i PATH="$tmp/bin" "$BASH" -c 'source "$1"; load_gh_token' _ "$SCRIPT_DIR/host-token.sh" 2>&1 || true)"
 [ -z "$out" ] || fail "load_gh_token printed output"
 pass "load_gh_token prints nothing"
 

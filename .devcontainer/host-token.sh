@@ -8,6 +8,7 @@
 #   1  no token (secret-tool missing, or the lookup was empty)
 # An explicitly set GH_TOKEN or GITHUB_TOKEN always wins. The value is only
 # captured and exported: never printed, never passed as an argument.
+# Do not run this under `set -x`: the trace would show the token.
 load_gh_token() {
     [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] || return 0
     command -v secret-tool >/dev/null 2>&1 || return 1
