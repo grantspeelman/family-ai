@@ -122,6 +122,11 @@ commandTests:
     args: ["version"]
     expectedOutput: ['2\.1\.15']
 
+  - name: bats is 1.14.0 (BATS_VERSION)
+    command: bats
+    args: ["--version"]
+    expectedOutput: ['Bats 1\.14\.0']
+
   - name: gosu is 1.19 (Ubuntu 26.04 archive)
     command: gosu
     args: ["--version"]
