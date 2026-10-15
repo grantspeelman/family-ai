@@ -26,7 +26,7 @@ Bash scripts in this repo are tested with bats-core, and the dev container ships
 ## Acceptance checklist
 
 - [x] The release tag and tarball URL exist: `gh api` shows `v1.14.0` as the latest release (no release assets, so GitHub's tag archive is the source).
-- [x] The SHA-256 was computed from two separate downloads of that URL and matched; the archive's embedded commit id matches the tag's commit.
+- [x] The SHA-256 was computed from two separate downloads of that URL and matched; the archive's embedded commit id matches the tag's target commit (the tag is annotated; its own object points at eb7f42f8...).
 - [x] In a temp directory, the verified tarball extracted, `install.sh <prefix>` ran, `<prefix>/bin/bats --version` printed `Bats 1.14.0`, and a trivial `.bats` file passed.
 - [x] The Dockerfile step reads correctly against the existing tool installs (version `ARG`, checksum `ENV`, `sha256sum -c`, cleanup, version check).
 - [ ] The image builds and `container-structure-test` passes with the new `bats` test. Not run here (no Docker daemon); confirmed by the `image` CI job.

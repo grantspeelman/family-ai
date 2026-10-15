@@ -115,6 +115,8 @@ RUN set -eux; \
 # release assets), so this is GitHub's archive of the v${BATS_VERSION} tag. It is
 # arch-independent, needs only bash, and install.sh puts it under /usr/local.
 # The helper libraries (bats-support, bats-assert) are not installed.
+# If GitHub regenerates the archive and the checksum check fails, re-verify the
+# embedded commit id (`git get-tar-commit-id`) against the tag and re-pin.
 ARG BATS_VERSION=1.14.0
 ENV BATS_SHA256=bb537b70b15b732f6d8827dd6578e3d8ce166636ce1f18ea9a074184fcce9177
 RUN set -eux; \
