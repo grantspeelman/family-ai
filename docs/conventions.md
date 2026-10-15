@@ -90,6 +90,16 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 
 **New language rule.** A PR that introduces a language (Rust with PR 1 or PR 6, the registry app's language with PR 2, and so on) adds it to the `matrix` in `codeql.yml` in the same PR, using CodeQL's language identifier from the docs above (for example `rust`) and the `build-mode` that language needs. Otherwise the new code is never analysed. Reviewers check for it. Do not add a language before its code exists.
 
+## What goes in the repo
+
+The repo is public and history is permanent, so what is committed is a deliberate choice (plan 12). The rule:
+
+- **Yes:** architecture docs, engineering docs, plans, conventions, runbooks and settings guides for the repo itself.
+- **No:** pricing, positioning, go-to-market or other commercial strategy, named customers or competitors, and personal data about people. Anything commercially sensitive, including drafts of it and notes that quote it.
+- **Unsure:** leave it out and ask the owner. Adding a document later is easy; removing one from history is not.
+
+A PR that adds or changes a doc is read against this rule. Mentioning that pricing and positioning stay out (as here) is fine; the content itself is not. `docs/README.md` says what lives where.
+
 ## Working principles
 
 These apply to every PR, not just the foundation ones.
@@ -146,4 +156,4 @@ Open items:
 - **Plan status.** Set the plan's `Status` to `in progress` while the PR is open, and to `merged` with the PR link at the end (see `AGENTS.md`).
 - **Never bypass the hook** with `--no-verify`.
 - **Public text stays clean.** Commit messages, PR text and docs are public. Follow the rule in `CLAUDE.md` about security concerns.
-- **Pricing and positioning stay out of the repo.** Architecture docs may be committed; which docs are, is decided in plan 12.
+- **Pricing and positioning stay out of the repo.** See [What goes in the repo](#what-goes-in-the-repo).
