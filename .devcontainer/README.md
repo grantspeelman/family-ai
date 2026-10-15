@@ -28,11 +28,48 @@ shares, so it survives rebuilds and covers both entry points.
 |---|---|
 | **Files** | Only this checkout, at `/workspace`. No host home directory, `~/.ssh` or `~/.claude`. |
 | **SSH** | Your host ssh-agent, forwarded as a socket. `start.sh` starts an agent and runs `ssh-add` if it needs to. The container can use your key to sign, but it can't read or copy the key. GitHub's host keys are pinned in the image. |
-| **GitHub API** | `GH_TOKEN` / `GITHUB_TOKEN`, passed through from the host environment. Use a fine-grained token scoped to this repo. |
+| **GitHub API** | A fine-grained token for this repo only. It comes from the host's credential store (or an explicitly set `GH_TOKEN` / `GITHUB_TOKEN`), never from a file in the repo. See [GitHub token](#github-token). |
 | **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
 | **Network** | Outbound access is not filtered. |
 
 Inside the container the `vscode` user has passwordless `sudo`.
+
+## GitHub token
+
+The token comes from the host's credential store, never from a file in the repo.
+At `start.sh` time, if neither `GH_TOKEN` nor `GITHUB_TOKEN` is set in your
+environment, `start.sh` looks the token up with `secret-tool` (libsecret, from
+the `libsecret-tools` package on Debian and Ubuntu) and passes it into the
+container as `GH_TOKEN`. A `GH_TOKEN` or `GITHUB_TOKEN` you set yourself always
+wins. The token is never printed. Compose reads no `.env` file.
+
+**Create the token** (GitHub, Settings, Developer settings, Fine-grained personal
+access tokens):
+
+- Resource owner: the account that owns the repository.
+- Expiration: 30 days.
+- Repository access: only this repository.
+- Permissions: Metadata (read), Contents (read and write), Pull requests (read
+  and write), Issues (read and write, if agents need issues), Actions (read),
+  Checks (read), Commit statuses (read). Add Workflows (read and write) only when
+  agents must edit workflow files.
+- Do not grant Administration, Secrets, Environments, Pages or Webhooks.
+
+**Store it.** `secret-tool` prompts for the value, so it never appears on a
+command line or in shell history:
+
+```sh
+secret-tool store --label=family-ai-gh service family-ai-gh
+```
+
+**Renew every 30 days.** Create a new token, store it again with the same command
+(it replaces the old value), rerun `.devcontainer/start.sh`, then delete the old
+token on GitHub. The container takes its environment when it is created, so it
+must be restarted after a rotation: `start.sh` recreates it when the token
+changed.
+
+If `secret-tool` is missing or has no entry, `start.sh` warns that `gh` will be
+unauthenticated and prints the store command.
 
 ## Project toolchain
 
@@ -89,5 +126,7 @@ end to end: SSH forwarding, Claude settings, the project toolchain, the commit
 hook, nested Docker, and switching back to unprivileged. It needs network access
 (it pulls `hello-world`). It runs in about 30 seconds and cleans up after
 itself, using a throwaway Claude config volume so your login is never touched.
+
+`host-token-test.sh` tests the token lookup in `start.sh` with a fake `secret-tool`. It needs no Docker and prints no token.
 
 CI (`.github/workflows/devcontainer-ci.yml`) runs both on every push to `main` and every PR.

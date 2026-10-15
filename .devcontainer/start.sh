@@ -29,7 +29,9 @@ checkout_slug="$(printf '%s' "$(basename "$PROJECT_ROOT")" | tr '[:upper:]' '[:l
 checkout_digest="$(printf '%s' "$PROJECT_ROOT" | cksum | cut -d ' ' -f 1)"
 COMPOSE_PROJECT="family-ai-${checkout_slug}-${checkout_digest}"
 SERVICE="app"
-COMPOSE=(docker compose -p "$COMPOSE_PROJECT"
+# --env-file /dev/null: compose reads no .env file; the token only ever comes
+# from the host's environment (see load_gh_token).
+COMPOSE=(docker compose -p "$COMPOSE_PROJECT" --env-file /dev/null
     -f "$SCRIPT_DIR/docker-compose.yml"
     -f "$SCRIPT_DIR/compose.ssh.yml")
 if [ "$docker_mode" = true ]; then
@@ -69,8 +71,12 @@ if [ "$(agent_status)" -eq 1 ]; then
 fi
 export HOST_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 
-if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
-    echo -e "${YELLOW}Neither GH_TOKEN nor GITHUB_TOKEN is set: gh inside the container will be unauthenticated.${NC}"
+# ── GitHub token: from the host environment, else the host's libsecret store ─
+# shellcheck source=host-token.sh
+source "$SCRIPT_DIR/host-token.sh"
+if ! load_gh_token; then
+    echo -e "${YELLOW}Neither GH_TOKEN nor GITHUB_TOKEN is set, and the host credential store has none: gh inside the container will be unauthenticated.${NC}"
+    echo -e "${YELLOW}To store a token (prompts for the value): secret-tool store --label=family-ai-gh service family-ai-gh${NC}"
 fi
 
 if [ "$docker_mode" = true ]; then
