@@ -17,6 +17,7 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | Merge gate: one required `ci` check over all CI jobs | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It runs the container checks, the full-history secret scan and the hook over the whole tree. The hook's gitleaks step scans nothing there (it only looks at staged files, and none are staged), so the full-history scan is the secret check. Lint, tests, duplication, complexity and license checks are not wired yet (PRs 2 and 7). Requiring it in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | CI (`workflows` job: `actionlint` and `.github/scripts/check-workflow-rules.py`) | Workflow in place (plan 08). Checks syntax, untrusted input in `run:`, SHA pins, `persist-credentials`, `secrets.`, `pull_request_target` / `workflow_run` and read-only top-level permissions. Judgement rules (per-job write permissions, a reason for each) are for the reviewer. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Dependabot version updates | `.github/dependabot.yml` | Config in place (plan 10) for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
+| CodeQL analysis (GitHub Actions workflows) | `.github/workflows/codeql.yml` | Workflow in place (plan 11), analysing the `actions` language on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:` yet. Results in the code scanning tab need the owner's settings: [docs/github-settings.md](github-settings.md) |
 | Dependency license check, registry app | CI | PR 2, not yet |
 | Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
 
@@ -77,6 +78,17 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 
   When bumping one by hand, take the new SHA-256 from the project's published checksums (workflow safety rule 6). There is no automation for this yet.
 - A base image bump can propose a tag the container does not suit (for example a non-LTS Ubuntu). A base-image bump is proposed by Dependabot but judged by a human: review it, and close it if it is not wanted. If the same unwanted tag would be proposed every week, add an `ignore` entry for it to the `docker` entry in `dependabot.yml`, with a comment giving the reason.
+
+## CodeQL
+
+`.github/workflows/codeql.yml` runs CodeQL on pull requests to `main`, on pushes to `main`, and weekly (Wednesdays, 03:17 UTC). It analyses what exists today: the workflows in `.github/workflows/`, CodeQL language `actions` (checked against GitHub's [advanced setup docs](https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning) on 2026-10-14).
+
+- **Permissions.** Top-level `contents: read` like every workflow. The one `analyze` job adds `security-events: write`, which CodeQL needs to upload results, with the reason in a comment. `contents: read` is restated on the job because job-level permissions replace the top-level block. GitHub's template also lists `actions: read` and `packages: read`; the first is for private repos and the second for private CodeQL packs, and neither applies here.
+- **Schedule trigger.** `schedule` is the one trigger here beyond `push` and `pull_request`. It is allowed: it runs only the workflow file on the default branch, never fork code, and the check script does not restrict it. GitHub disables scheduled workflows in a public repo after 60 days without repo activity, so a quiet repo can stop getting the weekly run until someone re-enables it.
+- **Not a gate yet.** CodeQL is not a required check and is not in the `ci` job's `needs:`. Decide that once there is real code and a sense of its noise.
+- **Dependabot** already covers the new action pins: the `github-actions` entry at `/` reads `github/codeql-action/init` and `analyze` like any other `uses:` line.
+
+**New language rule.** A PR that introduces a language (Rust with PR 1 or PR 6, the registry app's language with PR 2, and so on) adds it to the `matrix` in `codeql.yml` in the same PR, using CodeQL's language identifier from the docs above (for example `rust`) and the `build-mode` that language needs. Otherwise the new code is never analysed. Reviewers check for it. Do not add a language before its code exists.
 
 ## Working principles
 

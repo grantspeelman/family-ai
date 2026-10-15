@@ -1,6 +1,6 @@
 # 11 — CodeQL
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -25,11 +25,11 @@ Static security analysis runs on the repo's code automatically, so common vulner
 
 ## Acceptance checklist
 
-- [ ] CodeQL runs on this PR and on `main`, and passes.
-- [ ] Its permissions are the minimum CodeQL documents (`security-events: write` on the analysis job only).
-- [ ] Results appear in the repo's code scanning tab.
-- [ ] The conventions document says a new language is added to the analysis in the PR that introduces it.
-- [ ] Confirmed against GitHub's current terms that code scanning is free for public repos, with the date checked.
+- [ ] CodeQL runs on this PR and on `main`, and passes. Not verified: needs a real CI run. Locally, `actionlint` and the rules script pass on the workflow.
+- [x] Its permissions are the minimum CodeQL documents (`security-events: write` on the analysis job only). Top level is `contents: read`; the job adds `security-events: write` with a reason comment, per the CodeQL action README ("All advanced setup code scanning workflows must have the `security-events: write` permission").
+- [ ] Results appear in the repo's code scanning tab. Owner action: switch off default setup if on, then check after the first run ([docs/github-settings.md](../github-settings.md#code-scanning-codeql)).
+- [x] The conventions document says a new language is added to the analysis in the PR that introduces it.
+- [ ] Confirmed against GitHub's current terms that code scanning is free for public repos, with the date checked. Eligibility wording ("publicly visible, or GitHub Code Security is enabled") is cited with the date 2026-10-14 in docs/github-settings.md, but no page says "free" outright and the owner's Enable flow is untested; left unticked.
 
 ## Review depth
 
