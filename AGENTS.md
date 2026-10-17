@@ -25,6 +25,7 @@ Do not put security concerns about the local environment there. That includes cr
 | `lefthook.yml` | Git hook configuration (secret scan and changed-files checks before each commit). |
 | `.lefthook/` | Helper scripts the hook calls (currently the placeholder step). |
 | `.github/workflows/` | CI. Workflows follow the [workflow safety rules](docs/conventions.md#workflow-safety); `.github/scripts/check-workflow-rules.py` checks the mechanical ones. `.github/dependabot.yml` configures Dependabot version updates. |
+| `docs/README.md` | What lives in `docs/`, and the rule for what may be committed there. |
 | `docs/github-settings.md` | GitHub settings the owner applies by hand (branch protection, fork PR approval, secret scanning and push protection, Dependabot alerts and security updates, CodeQL default setup). |
 
 There is no application code yet. Language and framework rules arrive with the PRs that introduce those stacks.

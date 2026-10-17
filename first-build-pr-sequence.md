@@ -27,8 +27,8 @@ Also in PR 0:
 - Secret scanning in the pre-commit hook (gitleaks or similar), plus GitHub secret scanning with push protection switched on.
 - No real Fly token or API key in GitHub Actions. CI runs against the Fly mock, so it never needs one.
 - Fork PRs: CI workflows must not run untrusted code with secrets available.
-- Dependabot and CodeQL switched on (free for public repos, worth confirming against GitHub's current terms).
-- Decide which project docs get committed. Architecture docs are fine if you are happy sharing them; keep pricing and positioning out of the repo.
+- Dependabot (plan 10, `.github/dependabot.yml`) and CodeQL (plan 11, GitHub default setup). The repo settings and the free-for-public-repos evidence are in `docs/github-settings.md`.
+- Decide which project docs get committed. Architecture docs are fine if you are happy sharing them; keep pricing and positioning out of the repo (the rule is in [docs/conventions.md](docs/conventions.md#what-goes-in-the-repo)).
 
 ## PR sequence
 
@@ -47,7 +47,7 @@ Also in PR 0:
 | 11 | Front end: direct handoff | Once ready, talks directly to the family app's address (not proxied through the registry) and shows the real response. |
 | 12 | Persistence re-check | After an idle period (an hour or more), re-run the registry flow and confirm the earlier row is still on the volume. |
 
-**PR 12 addition — boot timing.** Record cold boot time end to end (app create → volume attach → Machine start → app ready) and Rust family app startup time as logged metrics during the persistence check, rather than a tight blocking gate. The architecture doc flags this as genuinely unmeasured — Firecracker itself boots in roughly 125 milliseconds, but the rest of the path (disk attach, mount, app start, migrations) has no real numbers yet. Assert only a generous sanity ceiling in CI for now (e.g. under 5 seconds, not 500 milliseconds) so a real regression still fails the build without chasing CI noise. Once real numbers exist, tighten the threshold with data instead of a guess.
+**PR 12 addition — boot timing.** Record cold boot time end to end (app create → volume attach → Machine start → app ready) and Rust family app startup time as logged metrics during the persistence check, rather than a tight blocking gate. The architecture notes (not in this repo) flag this as genuinely unmeasured — Firecracker itself boots in roughly 125 milliseconds, but the rest of the path (disk attach, mount, app start, migrations) has no real numbers yet. Assert only a generous sanity ceiling in CI for now (e.g. under 5 seconds, not 500 milliseconds) so a real regression still fails the build without chasing CI noise. Once real numbers exist, tighten the threshold with data instead of a guess.
 
 Real Fly credentials swap in after this list, as a later step — not part of the twelve.
 
