@@ -1,6 +1,6 @@
 # 02 — Dev container CI
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -25,11 +25,11 @@ Every push to `main` and every PR proves the dev container still builds and beha
 ## Acceptance checklist
 
 - [ ] The workflow runs on `push` to `main` and on `pull_request`, and passes on this PR.
-- [ ] `permissions` is `contents: read` and nothing broader.
-- [ ] No secrets are referenced anywhere in the workflow.
-- [ ] Every `uses:` is pinned to a full commit SHA with the version in a comment.
-- [ ] Every downloaded binary is verified against a pinned SHA-256 before it is run.
-- [ ] The secret scan covers full history (`fetch-depth: 0`), not just the tip.
+- [x] `permissions` is `contents: read` and nothing broader.
+- [x] No secrets are referenced anywhere in the workflow.
+- [x] Every `uses:` is pinned to a full commit SHA with the version in a comment.
+- [x] Every downloaded binary is verified against a pinned SHA-256 before it is run.
+- [x] The secret scan covers full history (`fetch-depth: 0`), not just the tip.
 - [ ] A deliberately failing change (for example, a wrong version in the structure test) turns the workflow red, shown once and then reverted.
 
 ## Review depth
