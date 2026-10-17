@@ -63,7 +63,7 @@ int main(void) { printf("%lu\n", (unsigned long)geteuid()); return 0; }
 PROBE
 cc "$tmp/probe.c" -o "$tmp/runtime-setuid-probe"
 sudo chown 0:0 "$tmp/runtime-setuid-probe"
-chmod 4755 "$tmp/runtime-setuid-probe"
+sudo chmod 4755 "$tmp/runtime-setuid-probe"
 docker cp --archive "$tmp/runtime-setuid-probe" "$container_id:/tmp/runtime-setuid-probe"
 # Docker extraction may clear setuid while assigning ownership. Restore only
 # this harmless fixture's mode using the trusted runner's explicit root exec.
