@@ -90,5 +90,5 @@ Open items:
 - **PR description.** Say what the PR does, link its plan, state the checklist status (each item ticked, or unticked with the reason), and state the review depth that applies (close read or skim).
 - **Plan status.** Set the plan's `Status` to `in progress` while the PR is open, and to `merged` with the PR link at the end (see `AGENTS.md`).
 - **Never bypass the hook** with `--no-verify`.
-- **Public text stays clean.** Commit messages, PR text and docs are public. Follow the rule in `CLAUDE.md` about security concerns.
+- **Public text stays clean.** Commit messages, PR text and docs are public. Follow the public-repo rule in `AGENTS.md` about security concerns.
 - **Pricing and positioning stay out of the repo.** Architecture docs may be committed; which docs are, is decided in plan 12.
