@@ -19,7 +19,7 @@
       }
     }
   },
-  "postStartCommand": ".devcontainer/postStartCommand.sh",
+  "postStartCommand": "/opt/family-ai-controls/postStartCommand.sh",
   "initializeCommand": [
     "bash",
     ".devcontainer/check-vscode-host.sh"

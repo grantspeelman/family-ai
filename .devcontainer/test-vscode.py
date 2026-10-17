@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 
@@ -26,6 +27,10 @@ class VscodeTests(unittest.TestCase):
     def test_clean_profile_and_argument_boundaries(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            controls = root / 'controls/.devcontainer'
+            shutil.copytree(ROOT, controls, ignore=shutil.ignore_patterns('__pycache__'))
+            (root / 'work/.git').mkdir(parents=True)
+            (root / 'controls/session.json').write_text(json.dumps({'version': 1, 'source': str(root / 'work')}))
             code = root / 'code'
             code.write_text('''#!/usr/bin/env python3
 import json, os, pathlib, subprocess, sys
@@ -58,7 +63,7 @@ if '--install-extension' not in args:
                        GH_TOKEN='dummy', GITHUB_TOKEN='dummy', SSH_AUTH_SOCK='/tmp/dummy.sock',
                        HOST_SSH_AUTH_SOCK='/tmp/dummy.sock', GIT_ASKPASS='/tmp/dummy',
                        AWS_SECRET_ACCESS_KEY='dummy')
-            result = subprocess.run(['bash', str(ROOT / 'start-vscode.sh'), '--goto', 'two words:3'],
+            result = subprocess.run(['bash', str(controls / 'start-vscode.sh'), '--goto', 'two words:3'],
                                     env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 

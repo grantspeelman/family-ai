@@ -10,6 +10,8 @@ for arg in "$@"; do
         -*) echo "Only file paths and --goto are accepted." >&2; exit 64 ;;
     esac
 done
+WORKSPACE_SOURCE="$(python3 -I "$SCRIPT_DIR/host-session.py" path)"
+export WORKSPACE_SOURCE
 editor="$(command -v code)"
 profile_root="$(mktemp -d "${TMPDIR:-/tmp}/family-ai-vscode.XXXXXXXX")"
 # --wait keeps the profile alive until the editor workspace has closed.
@@ -36,7 +38,7 @@ if [ "$editor_uid" -eq 0 ] || [ "$editor_gid" -eq 0 ]; then
     echo 'Start the editor as a non-root host user.' >&2
     exit 64
 fi
-clean_env=(env -i "USER_UID=$editor_uid" "USER_GID=$editor_gid" "PATH=$PATH" "HOME=$profile_root/home"
+clean_env=(env -i "WORKSPACE_SOURCE=$WORKSPACE_SOURCE" "USER_UID=$editor_uid" "USER_GID=$editor_gid" "PATH=$PATH" "HOME=$profile_root/home"
     "XDG_CONFIG_HOME=$profile_root/home/.config"
     "XDG_DATA_HOME=$profile_root/home/.local/share"
     "XDG_CACHE_HOME=$profile_root/home/.cache"

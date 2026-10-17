@@ -9,7 +9,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT="family-ai-smoke-$$"
-BASE=(docker compose -p "$PROJECT"
+tmp="$(mktemp -d)"
+# Match installed sessions: editable source must not alias trusted controls.
+python3 -I "$SCRIPT_DIR/host-session.py" create --source "$(cd "$SCRIPT_DIR/.." && pwd)" \
+    --session "$tmp/session"
+SCRIPT_DIR="$tmp/session/controls/.devcontainer"
+export WORKSPACE_SOURCE="$tmp/session/work"
+BASE=(docker compose --env-file /dev/null -p "$PROJECT"
     -f "$SCRIPT_DIR/docker-compose.yml"
     -f "$SCRIPT_DIR/smoke-test.compose.yml")
 in_container() { "${BASE[@]}" exec -T --user vscode app bash -c "$1"; }
@@ -17,7 +23,6 @@ in_container() { "${BASE[@]}" exec -T --user vscode app bash -c "$1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "ok - $*"; }
 
-tmp="$(mktemp -d)"
 cleanup() {
     "${BASE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
     rm -rf "$tmp"
@@ -49,6 +54,7 @@ docker inspect "$container_id" | jq -e '
     and (.HostConfig.NetworkMode == "none")
     and (.HostConfig.PidMode != "host")
     and all(.Mounts[]; .Destination == "/workspace"
+        or (.Destination == "/opt/family-ai-controls" and .RW == false)
         or .Destination == "/home/vscode/.claude"
         or .Destination == "/home/vscode/.codex"
         or (.Destination == "/run/egress" and .RW == false))' >/dev/null \
@@ -75,8 +81,15 @@ in_container 'test ! -S /var/run/docker.sock && test ! -S /run/containerd/contai
     || fail "Docker runtime socket present"
 pass "no Docker binaries or runtime sockets"
 
-in_container '.devcontainer/postStartCommand.sh' >/dev/null
+in_container '/opt/family-ai-controls/postStartCommand.sh' >/dev/null
 pass "postStartCommand.sh ran"
+controls_hash="$(sha256sum "$SCRIPT_DIR/postStartCommand.sh" | cut -d ' ' -f 1)"
+in_container 'printf "\n# dummy-source-proposal\n" >> /workspace/.devcontainer/postStartCommand.sh &&
+    test ! -w /opt/family-ai-controls/postStartCommand.sh' \
+    || fail "source/control isolation failed"
+[ "$(sha256sum "$SCRIPT_DIR/postStartCommand.sh" | cut -d ' ' -f 1)" = "$controls_hash" ] \
+    || fail "source proposal changed installed controls"
+pass "source proposals cannot alter installed lifecycle controls"
 
 [ "$(in_container 'id -u')" = "$USER_UID" ] || fail "vscode UID does not match host UID $USER_UID"
 pass "vscode runs as host UID $USER_UID"

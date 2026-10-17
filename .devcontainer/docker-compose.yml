@@ -1,5 +1,5 @@
 # Base definition shared by VS Code and start.sh. It deliberately mounts nothing
-# from the host but this checkout: no ~/.ssh, no ~/.claude, no home directory.
+# from the host but disposable source and read-only reviewed lifecycle controls.
 # Publishing credentials and SSH sockets stay on the host.
 services:
   egress:
@@ -45,7 +45,8 @@ services:
         USER_GID: ${USER_GID:-1000}
     volumes:
       - egress-socket:/run/egress:ro
-      - ..:/workspace:cached
+      - ${WORKSPACE_SOURCE:?Use an installed trusted host session}:/workspace:cached
+      - .:/opt/family-ai-controls:ro
       - claude-config:/home/vscode/.claude
       - codex-config:/home/vscode/.codex
 
