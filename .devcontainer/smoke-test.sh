@@ -3,8 +3,8 @@
 # uses: builds for the calling user's UID, forwards a throwaway ssh-agent, runs
 # the post-start setup, then exercises nested Docker and dropping back out of it.
 # Runs in CI and locally alike. Needs network access to pull hello-world. It uses
-# its own compose project, a throwaway Claude config volume (never your real
-# login's) and a temporary key in a fresh agent, and removes them all on exit.
+# its own compose project, throwaway Claude and Codex config volumes (never your real
+# logins') and a temporary key in a fresh agent, and removes them all on exit.
 set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -34,6 +34,7 @@ ssh-add -q "$tmp/key"
 export HOST_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 export USER_UID="$(id -u)" USER_GID="$(id -g)"
 export SMOKE_CLAUDE_VOLUME="$PROJECT-claude-config"
+export SMOKE_CODEX_VOLUME="$PROJECT-codex-config"
 
 echo "# privileged, with nested Docker"
 "${DOCKER[@]}" up --detach --build --quiet-pull

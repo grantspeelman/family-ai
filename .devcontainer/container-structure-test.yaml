@@ -11,7 +11,7 @@
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
 #   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
 #     ENABLE_DOCKER=1 (compose.docker.yml, privileged), then gosu-drops to vscode.
-#   • CLAUDE_CONFIG_DIR is a named volume, so the Claude login survives rebuilds.
+#   • CLAUDE_CONFIG_DIR and CODEX_HOME are named volumes, so the logins survive rebuilds.
 
 schemaVersion: 2.0.0
 
@@ -23,6 +23,8 @@ metadataTest:
   envVars:
     - key: CLAUDE_CONFIG_DIR
       value: /home/vscode/.claude
+    - key: CODEX_HOME
+      value: /home/vscode/.codex
     - key: DISABLE_AUTOUPDATER
       value: "1"
 
@@ -34,6 +36,11 @@ fileExistenceTests:
 
   - name: Claude config dir exists and is vscode-owned (seeds the volume's ownership)
     path: /home/vscode/.claude
+    shouldExist: true
+    uid: 1000
+
+  - name: Codex home exists and is vscode-owned (seeds the volume's ownership)
+    path: /home/vscode/.codex
     shouldExist: true
     uid: 1000
 
@@ -129,6 +136,12 @@ commandTests:
 
   - name: claude CLI available
     command: claude
+    args: ["--version"]
+    # Deliberately unpinned (see the Dockerfile); just assert the CLI runs.
+    exitCode: 0
+
+  - name: codex CLI available
+    command: codex
     args: ["--version"]
     # Deliberately unpinned (see the Dockerfile); just assert the CLI runs.
     exitCode: 0
