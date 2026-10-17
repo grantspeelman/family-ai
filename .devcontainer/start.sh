@@ -2,6 +2,9 @@
 # Build, start and attach to the dev container from a plain terminal.
 #   --rebuild  rebuild the image from scratch (also how Claude Code gets upgraded)
 #   --docker   privileged mode with nested Docker; see compose.docker.yml first
+#   --claude   run Claude Code directly instead of a shell (tells herdr it's an agent)
+#   --codex    run Codex directly instead of a shell (tells herdr it's an agent)
+#   -- command [args...]  run the given command inside the container
 set -euo pipefail
 
 GREEN='\033[0;32m'
@@ -14,13 +17,37 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 rebuild=false
 docker_mode=false
-for arg in "$@"; do
+agent=""
+command=(bash)
+while [ "$#" -gt 0 ]; do
+    arg="$1"
     case "$arg" in
         --rebuild) rebuild=true ;;
         --docker) docker_mode=true ;;
-        *) echo "Usage: $(basename "$0") [--rebuild] [--docker]" >&2; exit 64 ;;
+        --claude|--codex)
+            if [ -n "$agent" ] && [ "$agent" != "${arg#--}" ]; then
+                echo "--claude and --codex are mutually exclusive" >&2; exit 64
+            fi
+            agent="${arg#--}" ;;
+        --)
+            shift
+            if [ "$#" -eq 0 ] || [ -n "$agent" ]; then
+                echo "Supply a command after --, without --claude or --codex." >&2
+                exit 64
+            fi
+            command=("$@")
+            break ;;
+        *) echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex | -- command [args...]]" >&2; exit 64 ;;
     esac
+    shift
 done
+
+if [ -n "$agent" ]; then
+    command=("$agent")
+fi
+case "${command[0]}" in
+    claude|codex) agent="${command[0]}" ;;
+esac
 
 # One container per checkout: key the compose project to the checkout path, so
 # two checkouts never share (or recreate) each other's container. The name also
@@ -109,4 +136,9 @@ printf -v stop_command '%q ' "${COMPOSE[@]}"
 echo -e "${GREEN}The container outlives this shell: rerun this script to get back in.${NC}"
 echo -e "${GREEN}Stop it with: ${stop_command}down${NC}"
 
-exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" bash
+if [ -n "$agent" ]; then
+    # herdr finds agents by the pane's host-side foreground process, which here is
+    # docker, so HERDR_AGENT on this command (not inside the container) names it.
+    HERDR_AGENT="$agent" exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" "${command[@]}"
+fi
+exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" "${command[@]}"
