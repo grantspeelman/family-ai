@@ -25,6 +25,7 @@ Do not put security concerns about the local environment there. That includes cr
 | `lefthook.yml` | Git hook configuration (secret scan and changed-files checks before each commit). |
 | `.lefthook/` | Helper scripts the hook calls (currently the placeholder step). |
 | `.github/workflows/` | CI. |
+| `docs/github-settings.md` | GitHub settings the owner applies by hand (branch protection). |
 
 There is no application code yet. Language and framework rules arrive with the PRs that introduce those stacks.
 
@@ -33,4 +34,4 @@ There is no application code yet. Language and framework rules arrive with the P
 Write tests first (TDD) and run the tests for the code you are changing. Do not run sanity passes of the whole test suite or lint every file; focus on the task at hand.
 
 - **On commit:** lefthook (`lefthook.yml`) runs the minimum required checks on the files you changed. It is installed into `.git/hooks` by `.devcontainer/postStartCommand.sh`, so it runs on commits made inside the dev container; commits outside it skip the hook. Never bypass it with `--no-verify`. If it blocks a commit, fix the finding; any allowlist entry needs a written reason.
-- **On the PR:** CI runs the full checks, so whatever the hook does not cover is caught there.
+- **On the PR:** CI runs every test and lint job that exists, so whatever the hook does not cover is caught there. The `ci` job in `.github/workflows/devcontainer-ci.yml` is the single check meant to be required before merge; a PR that adds a CI job adds it to `ci`'s `needs:` (owner setup in [docs/github-settings.md](docs/github-settings.md)).

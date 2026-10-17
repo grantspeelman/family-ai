@@ -28,7 +28,7 @@ A conventions document (for example `docs/conventions.md`) capturing:
 ## Acceptance checklist
 
 - [x] The document exists and `AGENTS.md` links to it. (`docs/conventions.md`; linked from the Conventions section of `AGENTS.md`.)
-- [x] Each principle in the PR 0 section of `first-build-pr-sequence.md` appears, or the PR description says why one was left out. (All four are numbered under Working principles, in the order of the PR 0 list.)
+- [x] Each principle in the PR 0 section of `first-build-pr-sequence.md` appears, or the PR description says why one was left out. (All four are numbered 1 to 4 under Working principles, in the order of the PR 0 list. Plan 07 later added a fifth rule, the `ci` `needs:` rule, as rule 4, which moved the last PR 0 principle to 5.)
 - [x] The dependency license policy lists allowed and disallowed licenses explicitly. (Allowed and Disallowed lists in the Licensing section, matching `first-build-pr-sequence.md`.)
 - [x] Nothing in it states a decision the build has not made; open items are marked as open. (CLA and front end license check are marked open; the `LICENSE` is described as in place but not confirmed, as the source document says; unbuilt checks are labelled not yet.)
 - [x] No pricing or positioning content. (Only a line saying they stay out of the repo.)
