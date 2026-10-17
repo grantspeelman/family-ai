@@ -25,22 +25,7 @@ if [ -f /workspace/Cargo.toml ]; then
   (cd /workspace && cargo fetch --locked)
 fi
 
-# Status, so a missing credential shows up now rather than mid-task.
-if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-  echo "No SSH agent forwarded: git push over SSH will not work."
-else
-  agent_status=0
-  ssh-add -l >/dev/null 2>&1 || agent_status=$?
-  case "${agent_status}" in
-    0) ;;
-    1) echo "SSH agent reachable but holds no keys: run 'ssh-add' on the host." ;;
-    *) echo "SSH agent socket is dead (host agent restarted?): run .devcontainer/start.sh --rebuild." ;;
-  esac
-fi
-
-if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
-  echo "Neither GH_TOKEN nor GITHUB_TOKEN is set: gh (PRs, issues) is unauthenticated."
-fi
+echo "Publishing stays on the host: edit, test and commit locally here; see .devcontainer/README.md."
 
 if [ ! -s "${config_dir}/.credentials.json" ]; then
   echo "Claude is not logged in yet: run 'claude' and log in once; the login persists across rebuilds."

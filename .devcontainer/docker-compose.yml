@@ -1,6 +1,6 @@
 # Base definition shared by VS Code and start.sh. It deliberately mounts nothing
 # from the host but this checkout: no ~/.ssh, no ~/.claude, no home directory.
-# start.sh layers compose.ssh.yml (agent forwarding) on top of it.
+# Publishing credentials and SSH sockets stay on the host.
 services:
   app:
     build:
@@ -13,11 +13,6 @@ services:
       - ..:/workspace:cached
       - claude-config:/home/vscode/.claude
       - codex-config:/home/vscode/.codex
-    environment:
-      # Pass-through from the calling environment, never written to a file here.
-      # gh reads either; a fine-grained token scoped to this repo is enough.
-      - GH_TOKEN
-      - GITHUB_TOKEN
 
 volumes:
   # A fixed name, so the Claude login is shared by every container for this

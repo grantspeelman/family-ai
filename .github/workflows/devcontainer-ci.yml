@@ -29,13 +29,15 @@ jobs:
 
       - name: Validate compose files
         run: |
-          HOST_SSH_AUTH_SOCK=/dev/null docker compose \
+          docker compose \
             -f .devcontainer/docker-compose.yml \
-            -f .devcontainer/compose.ssh.yml \
             config --quiet
 
       - name: Launcher tests
-        run: python3 -I .devcontainer/test-start.py
+        run: |
+          python3 -I .devcontainer/test-start.py
+          python3 -I .devcontainer/test-vscode.py
+          python3 -I .devcontainer/test-publishing.py
 
       - name: Entry-point configuration checks
         run: python3 -I .devcontainer/test-runtime-config.py
@@ -64,8 +66,8 @@ jobs:
             -v "$PWD:/repo" -w /repo "$IMAGE" \
             git --redact --no-banner --verbose .
 
-  # Starts the container the way start.sh does and checks it behaves: SSH agent
-  # forwarding, Claude settings, commit hook, project toolchain and runtime
+  # Starts the container the way start.sh does and checks credential isolation,
+  # Claude settings, commit hook, project toolchain and runtime
   # isolation. The runner's UID (1001) also exercises the
   # image's UID remapping, which the default 1000 build above does not.
   smoke:

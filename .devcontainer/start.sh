@@ -8,7 +8,6 @@ set -euo pipefail
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-RED='\033[0;31m'
 NC='\033[0m'
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -57,8 +56,7 @@ checkout_digest="$(printf '%s' "$PROJECT_ROOT" | cksum | cut -d ' ' -f 1)"
 COMPOSE_PROJECT="family-ai-${checkout_slug}-${checkout_digest}"
 SERVICE="app"
 COMPOSE=(docker compose -p "$COMPOSE_PROJECT"
-    -f "$SCRIPT_DIR/docker-compose.yml"
-    -f "$SCRIPT_DIR/compose.ssh.yml")
+    -f "$SCRIPT_DIR/docker-compose.yml")
 
 USER_UID="$(id -u)"
 USER_GID="$(id -g)"
@@ -68,34 +66,6 @@ if [ "$USER_UID" -eq 0 ] || [ "$USER_GID" -eq 0 ]; then
     USER_GID=1000
 fi
 export USER_UID USER_GID
-
-# ── SSH: make sure a host agent is running and holds a key ───────────────────
-# ssh-add -l exits 0 (has keys), 1 (no keys) or 2 (no agent reachable).
-agent_status() { local s=0; ssh-add -l >/dev/null 2>&1 || s=$?; echo "$s"; }
-
-if [ -z "${SSH_AUTH_SOCK:-}" ] || [ "$(agent_status)" -eq 2 ]; then
-    # No session agent: use one at a fixed path, so later runs find it again
-    # instead of starting an agent per run.
-    SSH_AUTH_SOCK="${XDG_RUNTIME_DIR:-$HOME/.ssh}/family-ai-ssh-agent.sock"
-    export SSH_AUTH_SOCK
-    if [ "$(agent_status)" -eq 2 ]; then
-        rm -f "$SSH_AUTH_SOCK"
-        ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
-        echo -e "${GREEN}Started ssh-agent on ${SSH_AUTH_SOCK}${NC}"
-    fi
-fi
-if [ "$(agent_status)" -eq 1 ]; then
-    echo -e "${GREEN}The ssh-agent holds no keys; loading your default key...${NC}"
-    if ! ssh-add; then
-        echo -e "${RED}ssh-add failed. Load a key yourself (ssh-add <path>) and rerun.${NC}" >&2
-        exit 1
-    fi
-fi
-export HOST_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
-
-if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
-    echo -e "${YELLOW}Neither GH_TOKEN nor GITHUB_TOKEN is set: gh inside the container will be unauthenticated.${NC}"
-fi
 
 # ── Build and start ──────────────────────────────────────────────────────────
 if [ "$rebuild" = true ]; then
