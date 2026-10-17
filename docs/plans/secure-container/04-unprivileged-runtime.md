@@ -64,3 +64,8 @@ including entrypoint behavior, volume initialization, and compatibility exceptio
   graphical editor session is also required before claiming editor acceptance.
 - Rootless/user-namespace prerequisites and unsupported editor socket behavior
   are documented in `.devcontainer/README.md`; no host settings are changed.
+
+- The harmless setuid fixture is compiled root-owned during the smoke-only image
+  stage. Normal terminal/editor images use the final development-derived stage,
+  which excludes the fixture; image structure tests verify its absence. Smoke
+  setup does not copy files or change ownership/mode inside a running container.

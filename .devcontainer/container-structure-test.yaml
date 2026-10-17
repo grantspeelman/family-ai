@@ -28,6 +28,10 @@ metadataTest:
       value: "1"
 
 fileExistenceTests:
+  - name: smoke setuid fixture is absent from the default image
+    path: /tmp/runtime-setuid-probe
+    shouldExist: false
+
   - name: workspace mount point exists
     path: /workspace
     shouldExist: true

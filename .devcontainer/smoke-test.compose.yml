@@ -1,6 +1,11 @@
 # Used only by smoke-test.sh. Renames the Claude and Codex config volumes to a per-run
 # throwaway, so the test never touches the shared volume holding your real
 # logins — and so smoke-test.sh's `down --volumes` can't delete it either.
+services:
+  app:
+    build:
+      target: smoke
+
 volumes:
   claude-config:
     name: ${SMOKE_CLAUDE_VOLUME:?smoke-test.sh sets SMOKE_CLAUDE_VOLUME}

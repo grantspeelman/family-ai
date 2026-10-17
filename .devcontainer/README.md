@@ -210,7 +210,9 @@ SHA-256), update its test in the same commit.
 `smoke-test.sh` starts a standard, unprivileged container and checks it end
 to end: runtime privileges and mounts, credential absence, Claude settings, the
 project toolchain, the commit hook, direct non-root identity, dropped capabilities,
-active seccomp, no-new-privileges and a harmless root-owned setuid probe. It runs from a Docker-capable CI runner
+active seccomp, no-new-privileges and a harmless root-owned setuid probe.
+The probe is baked into a smoke-only build stage; default terminal/editor images
+exclude it, and smoke setup requires no runtime privilege escalation. It runs from a Docker-capable CI runner
 or trusted host, with throwaway Claude and Codex config volumes and dummy host
 token values.
 It does not mount a Docker socket or start a nested daemon.

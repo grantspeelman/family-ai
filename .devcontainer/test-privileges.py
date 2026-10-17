@@ -14,7 +14,7 @@ assert status["Seccomp"].strip() == "2", "default seccomp filter absent"
 for field in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
     assert int(status[field], 16) == 0, field
 assert subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0
-# The CI host copies this root-owned setuid probe into the disposable container.
+# The smoke-only image stage installs this root-owned setuid probe.
 # It prints its effective UID; no-new-privileges must prevent switching to root.
 probe = Path("/tmp/runtime-setuid-probe")
 assert probe.stat().st_uid == 0 and probe.stat().st_mode & 0o4000

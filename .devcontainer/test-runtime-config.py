@@ -18,6 +18,13 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertEqual(editor["containerUser"], "vscode")
         self.assertFalse(editor["updateRemoteUserUID"])
 
+    def test_setuid_probe_is_only_built_for_smoke_image(self):
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        self.assertIn("FROM ubuntu:26.04 AS development", dockerfile)
+        self.assertIn("FROM development AS smoke", dockerfile)
+        self.assertTrue(dockerfile.rstrip().endswith("FROM development AS final"))
+        self.assertNotIn("docker cp", (ROOT / "smoke-test.sh").read_text())
+
     def test_entry_points_have_no_docker_authority(self):
         vscode = json.loads((ROOT / "devcontainer.json").read_text())
         files = vscode["dockerComposeFile"]
@@ -42,6 +49,10 @@ class RuntimeConfigTests(unittest.TestCase):
                 services = json.loads(result.stdout)["services"]
                 app = services["app"]
                 gateway = services["egress"]
+                if name == "smoke":
+                    self.assertEqual(app["build"]["target"], "smoke")
+                else:
+                    self.assertNotIn("target", app["build"])
                 self.assertTrue(gateway["read_only"])
                 self.assertIn("ALL", gateway["cap_drop"])
                 self.assertEqual(app["depends_on"]["egress"]["condition"], "service_healthy")

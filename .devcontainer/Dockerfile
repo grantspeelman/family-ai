@@ -1,7 +1,7 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
 # Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; only gh and
 # gitleaks, whose archive versions are too old, are fetched as pinned binaries below.
-FROM ubuntu:26.04
+FROM ubuntu:26.04 AS development
 
 # pipefail so `curl | tar` and friends fail loudly on a broken download.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -164,3 +164,15 @@ RUN chmod +x /entrypoint.sh
 USER vscode
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["sleep", "infinity"]
+
+# Only disposable smoke containers include this harmless effective-UID probe.
+FROM development AS smoke
+USER root
+COPY .devcontainer/runtime-setuid-probe.c /tmp/runtime-setuid-probe.c
+RUN cc /tmp/runtime-setuid-probe.c -o /tmp/runtime-setuid-probe \
+    && chmod 4755 /tmp/runtime-setuid-probe \
+    && rm /tmp/runtime-setuid-probe.c
+USER vscode
+
+# Default terminal/editor image inherits no files from the smoke stage.
+FROM development AS final
