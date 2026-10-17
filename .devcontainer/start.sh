@@ -4,6 +4,7 @@
 #   --docker   privileged mode with nested Docker; see compose.docker.yml first
 #   --claude   run Claude Code directly instead of a shell (tells herdr it's an agent)
 #   --codex    run Codex directly instead of a shell (tells herdr it's an agent)
+#   -- command [args...]  run the given command inside the container
 set -euo pipefail
 
 GREEN='\033[0;32m'
@@ -17,7 +18,9 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 rebuild=false
 docker_mode=false
 agent=""
-for arg in "$@"; do
+command=(bash)
+while [ "$#" -gt 0 ]; do
+    arg="$1"
     case "$arg" in
         --rebuild) rebuild=true ;;
         --docker) docker_mode=true ;;
@@ -26,9 +29,25 @@ for arg in "$@"; do
                 echo "--claude and --codex are mutually exclusive" >&2; exit 64
             fi
             agent="${arg#--}" ;;
-        *) echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex]" >&2; exit 64 ;;
+        --)
+            shift
+            if [ "$#" -eq 0 ] || [ -n "$agent" ]; then
+                echo "Supply a command after --, without --claude or --codex." >&2
+                exit 64
+            fi
+            command=("$@")
+            break ;;
+        *) echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex | -- command [args...]]" >&2; exit 64 ;;
     esac
+    shift
 done
+
+if [ -n "$agent" ]; then
+    command=("$agent")
+fi
+case "${command[0]}" in
+    claude|codex) agent="${command[0]}" ;;
+esac
 
 # One container per checkout: key the compose project to the checkout path, so
 # two checkouts never share (or recreate) each other's container. The name also
@@ -120,6 +139,6 @@ echo -e "${GREEN}Stop it with: ${stop_command}down${NC}"
 if [ -n "$agent" ]; then
     # herdr finds agents by the pane's host-side foreground process, which here is
     # docker, so HERDR_AGENT on this command (not inside the container) names it.
-    HERDR_AGENT="$agent" exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" "$agent"
+    HERDR_AGENT="$agent" exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" "${command[@]}"
 fi
-exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" bash
+exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" "${command[@]}"

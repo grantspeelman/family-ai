@@ -16,6 +16,19 @@ container keeps running after you exit.
 | `--codex`   | Same, for Codex. |
 | `--docker`  | Privileged mode with nested Docker. Read [Nested Docker](#nested-docker) first. |
 
+Run a specific command by putting it and its arguments after `--`:
+
+```sh
+.devcontainer/start.sh --rebuild -- claude --resume
+.devcontainer/start.sh -- codex resume
+.devcontainer/start.sh -- bash -lc 'echo "hello from the container"'
+```
+
+Everything after `--` is passed directly to the container command, preserving
+argument boundaries. With no command, the launcher opens Bash. Commands named
+`claude` or `codex` set `HERDR_AGENT` for [herdr](https://herdr.dev); the
+`--claude` and `--codex` shortcuts still work, but cannot be combined with `--`.
+
 **VS Code:** *Dev Containers: Reopen in Container*. VS Code builds its own
 container from the same `docker-compose.yml`, separate from the one
 `start.sh` builds.
