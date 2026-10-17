@@ -8,7 +8,7 @@ Dependency and action updates and security advisories arrive as PRs without anyo
 
 ## Builds on
 
-- 07 — CI full-suite gate (Dependabot PRs must pass the same gate)
+- 07 — CI gate (Dependabot PRs must pass the same gate)
 - 08 — Workflow safety (Dependabot PRs run with restricted permissions and no secrets)
 
 ## In scope
