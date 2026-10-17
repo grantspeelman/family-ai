@@ -8,7 +8,7 @@ Static security analysis runs on the repo's code automatically, so common vulner
 
 ## Builds on
 
-- 07 — CI full-suite gate
+- 07 — CI gate
 - 08 — Workflow safety (CodeQL runs under the same permission rules)
 
 ## In scope

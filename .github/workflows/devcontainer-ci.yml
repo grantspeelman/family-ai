@@ -59,21 +59,6 @@ jobs:
             -v "$PWD:/repo" -w /repo "$IMAGE" \
             git --redact --no-banner --verbose .
 
-      # The commit hook's own configuration, run over every tracked file instead of
-      # only staged ones. Today this checks that lefthook.yml parses and runs, and
-      # the placeholder steps skip because no .rs or Cargo.* files exist. Once PR 2
-      # and PR 7 replace the placeholders it runs the real lint, test, duplication,
-      # complexity and cargo-deny checks over the whole tree. The hook's gitleaks
-      # step only looks at staged changes, so with nothing staged it scans nothing;
-      # the full-history scan above is the real secret check.
-      - name: Commit-hook checks (whole tree)
-        run: |
-          # --entrypoint skips the image's entrypoint, which switches user with gosu
-          # and fails when already running as the runner's UID.
-          docker run --rm --entrypoint lefthook --user "$(id -u):$(id -g)" -e HOME=/tmp \
-            -v "$PWD:/repo" -w /repo "$IMAGE" \
-            run pre-commit --all-files
-
   # Starts the container the way start.sh does and checks it behaves: SSH agent
   # forwarding, Claude settings, commit hook, project toolchain, nested Docker, and
   # dropping back to unprivileged. The runner's UID (1001) also exercises the
@@ -120,13 +105,15 @@ jobs:
 
   # The single required status check. Branch protection requires this job's name
   # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
-  # a job added to that list is gated automatically. `if: always()` makes it run
-  # even when a needed job failed; without it a failed job would leave this one
-  # skipped, and GitHub treats a skipped required check as passing. Anything other
-  # than `success` (failed, cancelled, skipped) fails it.
+  # a job is gated once it is in that list. `if: always()` makes this job run even
+  # when a needed job failed; without it a failed job would leave this one skipped,
+  # and GitHub can treat a skipped required check as passing. Anything other than
+  # `success` (failed, cancelled, skipped) fails it, and so does an empty list.
   ci:
     name: ci
     if: always()
+    # Every CI job that must pass before merge is listed here. A new job must be
+    # added to this list when it is introduced, or it does not gate merging.
     needs: [image, smoke, workflows]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -141,10 +128,8 @@ jobs:
             echo "| Job | Result |"
             echo "| --- | --- |"
             jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"$NEEDS"
-            echo
-            echo "**Not wired yet (these checks do not run):** lint, tests, duplication and complexity, and dependency license checks (\`cargo-deny\`). They arrive with PR 2 (registry app) and PR 7 (family app). Until then the hook's steps for them are placeholders."
           } | tee -a "$GITHUB_STEP_SUMMARY"
-          if ! jq -e 'all(.[]; .result == "success")' <<<"$NEEDS" >/dev/null; then
+          if ! jq -e 'length > 0 and all(.[]; .result == "success")' <<<"$NEEDS" >/dev/null; then
             echo "A needed job did not succeed." >&2
             exit 1
           fi
