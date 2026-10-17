@@ -40,3 +40,9 @@ One plan per PR. Each plan is a single idea that lands as its own PR, and each b
 | 12 | [Which docs are committed](12-docs-in-repo.md) | Close read |
 
 The AGPL-3.0 `LICENSE` is already committed and has no plan.
+
+## Secure container sequence
+
+The [secure container plans](secure-container/README.md) define seven separate
+PRs for containing prompt-injected agent commands. Their numbering is local to
+that directory and separate from the PR 0 sequence above.
