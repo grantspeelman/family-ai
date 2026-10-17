@@ -30,17 +30,26 @@ class RuntimeConfigTests(unittest.TestCase):
                     command.extend(["-f", str(ROOT / file)])
                 result = subprocess.run([*command, "config", "--format", "json"],
                                         env=env, capture_output=True, text=True, check=True)
-                app = json.loads(result.stdout)["services"]["app"]
+                services = json.loads(result.stdout)["services"]
+                app = services["app"]
+                gateway = services["egress"]
+                self.assertTrue(gateway["read_only"])
+                self.assertIn("ALL", gateway["cap_drop"])
+                self.assertEqual(app["depends_on"]["egress"]["condition"], "service_healthy")
+                self.assertTrue(next(mount for mount in app["volumes"]
+                                     if mount["target"] == "/run/egress")["read_only"])
+                self.assertEqual(len(gateway["volumes"]), 1)
+                self.assertNotIn("ports", gateway)
                 self.assertFalse(app.get("privileged", False))
                 self.assertFalse(app.get("devices"))
                 self.assertFalse(app.get("device_cgroup_rules"))
                 self.assertFalse(app.get("cap_add"))
-                self.assertNotEqual(app.get("network_mode"), "host")
+                self.assertEqual(app.get("network_mode"), "none")
                 self.assertNotEqual(app.get("pid"), "host")
                 environment = app.get("environment", {})
                 self.assertNotIn("DOCKER_HOST", environment)
                 self.assertNotIn("ENABLE_DOCKER", environment)
-                allowed = {"/workspace", "/home/vscode/.claude", "/home/vscode/.codex"}
+                allowed = {"/workspace", "/home/vscode/.claude", "/home/vscode/.codex", "/run/egress"}
                 for key in ("GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "HOST_SSH_AUTH_SOCK"):
                     self.assertNotIn(key, environment)
                 self.assertEqual({mount["target"] for mount in app.get("volumes", [])}, allowed)

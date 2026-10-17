@@ -2,7 +2,34 @@
 # from the host but this checkout: no ~/.ssh, no ~/.claude, no home directory.
 # Publishing credentials and SSH sockets stay on the host.
 services:
+  egress:
+    build:
+      context: ..
+      dockerfile: .devcontainer/egress/Dockerfile
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - egress-socket:/run/egress
+    healthcheck:
+      test: [CMD, python3, -I, /usr/local/lib/egress-proxy.py, check]
+      interval: 2s
+      timeout: 3s
+      retries: 15
   app:
+    # No veth, Docker DNS, LAN or IPv6 route. Only loopback development services
+    # and the external gateway's Unix socket are reachable, even as app root.
+    network_mode: none
+    depends_on:
+      egress:
+        condition: service_healthy
+    environment:
+      HTTPS_PROXY: http://127.0.0.1:3128
+      https_proxy: http://127.0.0.1:3128
+      HTTP_PROXY: http://127.0.0.1:3128
+      http_proxy: http://127.0.0.1:3128
+      NO_PROXY: localhost,127.0.0.1,::1
+      no_proxy: localhost,127.0.0.1,::1
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
@@ -10,11 +37,13 @@ services:
         USER_UID: ${USER_UID:-1000}
         USER_GID: ${USER_GID:-1000}
     volumes:
+      - egress-socket:/run/egress:ro
       - ..:/workspace:cached
       - claude-config:/home/vscode/.claude
       - codex-config:/home/vscode/.codex
 
 volumes:
+  egress-socket:
   # A fixed name, so the Claude login is shared by every container for this
   # repo — VS Code's and start.sh's, across checkouts and rebuilds.
   claude-config:

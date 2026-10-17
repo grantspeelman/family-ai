@@ -1,6 +1,6 @@
 # 03 — Enforce network restrictions
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -34,7 +34,7 @@ enforcement boundary that arbitrary agent commands cannot modify or bypass.
 
 ## Acceptance checklist
 
-- [ ] A written destination policy states allowed services and required local
+- [x] A written destination policy states allowed services and required local
   development connections, with no broad wildcard justified only by convenience.
 - [ ] Controlled tests demonstrate denied arbitrary outbound traffic, direct
   connections around the proxy, unnecessary private networks, and metadata access.
@@ -51,3 +51,17 @@ enforcement boundary that arbitrary agent commands cannot modify or bypass.
 
 **Close read.** Review the actual traffic path and bypass cases, including allowed
 services that can accept uploads and the location of the enforcement authority.
+
+## Implementation and verification
+
+The app uses Docker's `network_mode: none`, with a read-only Unix socket to a
+separate CONNECT gateway. Exact HTTPS destinations and public DNS validation are
+baked into its image; the app relay cannot change policy. The [runtime network
+policy](../../../.devcontainer/egress/README.md) documents destinations, trust
+boundaries, residual upload risk and account-dependent acceptance.
+
+Focused proxy fixture tests and Compose configuration checks run without provider
+credentials. Docker smoke tests additionally check interface/route isolation, DNS,
+IPv4/IPv6, proxy bypass, gateway failure and a locked Cargo fetch. They require a
+Docker-capable host/CI and have not been run in the agent container. Authenticated
+Claude/Codex terminal and VS Code checks remain manual and unrun.

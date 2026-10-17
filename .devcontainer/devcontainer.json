@@ -2,6 +2,7 @@
   "name": "family-ai",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
+  "overrideCommand": false,
   "workspaceFolder": "/workspace",
   "remoteUser": "vscode",
   "customizations": {
