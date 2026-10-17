@@ -1,6 +1,6 @@
 # 06 — Changed-files pre-commit checks
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -26,12 +26,12 @@ A commit that fails lint, tests or duplication and complexity checks on the file
 
 ## Acceptance checklist
 
-- [ ] A commit touching only docs runs only the checks that apply to docs, and passes.
-- [ ] A check that exits non-zero blocks the commit. Shown once with a throwaway failing check, then reverted.
-- [ ] Checks receive only the changed files, not the whole tree.
-- [ ] Placeholder steps print that they are placeholders; none silently pass as if they had run something.
-- [ ] The README explains how to add a language's checks.
-- [ ] The hook finishes in a few seconds on a small change.
+- [x] A commit touching only docs runs only the checks that apply to docs, and passes. (Verified: only the secret scan runs, the four placeholder steps are skipped.)
+- [x] A check that exits non-zero blocks the commit. Shown once with a throwaway failing check, then reverted. (Verified with a real `git commit`; the throwaway config is removed.)
+- [x] Checks receive only the changed files, not the whole tree. (Verified: a debug step received only the staged `.rs` files, not the staged `.md` or `Cargo.toml`.)
+- [x] Placeholder steps print that they are placeholders; none silently pass as if they had run something. (Each prints `PLACEHOLDER ... did NOT run`; lefthook's summary still ticks them, which `docs/conventions.md` states.)
+- [x] The README explains how to add a language's checks. (In `docs/conventions.md`, linked from `AGENTS.md`; there is no README for the hook.)
+- [x] The hook finishes in a few seconds on a small change. (About 0.3 seconds on a small change.)
 
 ## Review depth
 

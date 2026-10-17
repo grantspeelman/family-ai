@@ -59,8 +59,11 @@ exists. There are no backing services: SQLite is a file on the app's volume.
 
 The image ships `lefthook` and `gitleaks`, and `postStartCommand.sh` installs
 the git hooks. The hook configuration (`lefthook.yml`) runs `gitleaks` on
-staged changes before every commit made inside the container. A commit that
-contains a secret is blocked and the finding is redacted in the output.
+staged changes before every commit made inside the container, then
+changed-files steps for lint, tests, duplication and complexity, and
+`cargo-deny` (placeholders until the tools are installed; see
+`docs/conventions.md`). A commit that contains a secret is blocked and the
+finding is redacted in the output.
 
 Commits made outside the container skip the hook (git prints "Can't find
 lefthook" and lets the commit through), so CI is the backstop for those.
