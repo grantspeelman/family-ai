@@ -176,7 +176,7 @@ secret-free automated smoke fixtures.
 | **Files** | Disposable `work` at `/workspace`; reviewed lifecycle controls read-only at `/opt/family-ai-controls`. Trusted checkout and its Git metadata are not mounted. |
 | **SSH** | No host agent forwarding or host keys. The launcher never starts an agent or loads keys. |
 | **GitHub API** | Public unauthenticated queries only; publishing credentials stay on the host. |
-| **Provider state** | Only the selected provider directory; shell defaults to neither. Claude settings are initialized only when Claude is selected. |
+| **Provider state** | Only the selected provider directory; shell defaults to neither. Immutable system policies apply to both providers. |
 | **Network** | Loopback and approved HTTPS destinations through the separate gateway. |
 
 The application, its relay, terminal shells and editor commands start directly as
@@ -382,3 +382,76 @@ connections are unavailable. Local development servers still work on loopback.
 See [the runtime network policy](egress/README.md) for the allowlist, authentication
 steps, limitations, and Docker-host acceptance tests. Rebuild both images after a
 reviewed policy update; do not enable unrestricted networking for troubleshooting.
+
+## Agent execution policy
+
+The default profile uses the **outer container as its OS sandbox** for both
+agents. This is an explicit compatibility exception to nested CLI sandboxes:
+Docker's default seccomp/user-namespace restrictions may prevent nested
+bubblewrap from starting. We do not add capabilities, disable seccomp or relax
+AppArmor to make a nested sandbox work. There is no automatic fallback from a
+failed inner sandbox. The supported profile deliberately uses the checked outer
+boundary from the outset.
+
+The app root filesystem is read-only. Writes go to disposable `/workspace`,
+`/home/vscode` (caches and editor state), `/tmp`, and the selected provider state
+mount. The home and temporary filesystems have bounded sizes and do not survive
+container recreation. The installed launch controls and system policy files are
+read-only. Network access stays restricted by the separate gateway, regardless
+of proxy variables, CLI flags or project settings. Non-root identity, no added
+privileges and dropped capabilities apply to every process.
+
+`agent-policy.py` checks those mandatory boundaries before the container's
+requested command runs and refuses startup when they are missing. The check is
+in the image entrypoint, so terminal shortcuts, `-- command`, plain shells and
+the remote VS Code server inherit the same boundary. Unsupported host/cloud
+execution and externally connected computer access are outside this profile.
+An agent can request a stricter inner sandbox; if it fails, the command fails.
+
+| Surface | Effective policy |
+| --- | --- |
+| Claude CLI | `/etc/claude-code/managed-settings.json`: `dontAsk` denies calls that would prompt; ordinary Bash, file and subagent tools are pre-approved. Bypass mode is disabled. Nested sandboxing is deliberately disabled. |
+| Codex CLI | `/etc/codex/config.toml`: `approval_policy = "never"`, `sandbox_mode = "danger-full-access"`; this means no **inner** sandbox. The outer OS boundary remains mandatory. User/project settings may choose stricter execution settings. |
+| Native read/edit tools | The same OS permissions and mounts as the harness. The `/root` directory is inaccessible, and writes to system paths and launch controls are denied. This covers tools that do not use a shell. |
+| Local plugins, hooks and MCP subprocesses | Any process they launch inherits the container boundary. Their executable state remains disposable/resettable as described above. |
+| External tools | No MCP server, app connector or plugin is provisioned. Claude's managed MCP allowlist is empty and connectors are disabled. Codex's immutable `requirements.toml` has empty MCP/plugin allowlists and disables apps/plugins/remote catalog features. Remote tool effects on other systems are not constrained by local filesystem permissions. |
+| VS Code extensions | Only the selected provider is installed by the clean host launcher. In-container processes inherit the OS boundary. CLI/IDE configuration is shared where upstream supports it; the extension's bundled harness may differ. Host editor bridges, additional extensions and remote execution features require a separate trust decision. |
+
+This policy does not hide a provider's own login from that provider's process or
+from commands running as the same user. Protect unrelated secrets by leaving
+them outside the session; neither a read-only root nor an inner Bash sandbox
+creates a credential vault. Content already copied into the workspace is
+readable. Approved model/package endpoints can still receive data, so the
+gateway is not a data-loss prevention service.
+
+Configuration semantics were checked against Codex CLI **0.163.0** and Claude
+Code **2.1.300** on 2026-10-17 using help/doctor commands with empty temporary
+provider homes and no model calls. Images deliberately install current releases;
+CI checks their configuration loading and the mandatory runtime boundary.
+Sources: [Codex configuration precedence](https://learn.chatgpt.com/docs/config-file/config-basic),
+[Codex configuration and requirements](https://learn.chatgpt.com/docs/config-file/config-reference),
+[Claude permissions](https://code.claude.com/docs/en/permissions),
+[Claude managed settings](https://code.claude.com/docs/en/managed-settings), and
+[Claude sandbox scope](https://code.claude.com/docs/en/sandboxing).
+
+Run `python3 -I .devcontainer/test-agent-policy.py` for fail-closed fixture tests,
+`python3 -I .devcontainer/test-runtime-config.py` for the composed entry points,
+and `.devcontainer/smoke-test.sh` on a trusted Docker host for actual mount,
+identity, network and policy probes under every selected-state profile. The
+smoke fixture runs ordinary edit/build/test/commit work without model credentials;
+it does not impersonate the agents' native tools.
+
+Claude account policy can override these system defaults: under upstream's
+`first-wins` managed-source precedence, a remote organization policy ranks above
+the `/etc/claude-code/managed-settings.json` file. During authenticated acceptance,
+use `/status` to verify which source was selected and its effective permission,
+MCP and sandbox settings. Do not assume the system file wins for every account.
+The outer OS restrictions remain enforced regardless of which managed source wins.
+
+Before rollout, manually start each selected terminal and IDE session, check the
+agent's effective settings (`/status` for Claude), and request a harmless source
+edit, build, test and local commit. Ask native file tools to read a dummy file
+under `/root` and to write under `/etc`; both should fail. Check denied network
+destinations and verify selected-provider login survives a rebuild. These
+manual authenticated sessions remain separate acceptance checks; CI cannot
+confirm account-specific policy or extension UI behavior.

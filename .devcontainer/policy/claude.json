@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "disableBypassPermissionsMode": "disable",
+    "allow": ["Bash", "Read", "Edit", "Write", "Glob", "Grep", "Agent", "NotebookEdit"]
+  },
+  "sandbox": {"enabled": false},
+  "allowManagedMcpServersOnly": true,
+  "allowedMcpServers": [],
+  "disableClaudeAiConnectors": true,
+  "strictKnownMarketplaces": []
+}

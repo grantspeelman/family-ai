@@ -10,15 +10,6 @@ if [ -d /workspace/.git ]; then
   lefthook install
 fi
 
-# Permission prompts off by default. This is the container's own Claude config,
-# so the host's settings are untouched. Only selected Claude state is initialized.
-if [ "${FAMILY_AI_AGENT:-none}" = claude ]; then
-settings="${config_dir}/settings.json"
-[ -s "${settings}" ] || echo '{}' > "${settings}"
-jq '.permissions.defaultMode = "bypassPermissions"' "${settings}" > "${settings}.tmp"
-mv "${settings}.tmp" "${settings}"
-fi
-
 # Rust dependencies, once there is a workspace to fetch for. `--locked` honours
 # Cargo.lock and is a quick no-op when the registry cache already has everything.
 if [ -f /workspace/Cargo.toml ]; then

@@ -1,0 +1,8 @@
+# No connected external tools are provisioned for this development profile.
+allowed_web_search_modes = ["disabled"]
+mcp_servers = {}
+plugins = {}
+[features]
+apps = false
+plugins = false
+remote_plugin = false

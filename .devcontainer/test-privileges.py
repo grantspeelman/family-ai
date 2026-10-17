@@ -1,5 +1,6 @@
 """Harmless runtime assertions; invoked only inside the disposable CI container."""
 import os
+import errno
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,7 +17,7 @@ for field in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
 assert subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0
 # The smoke-only image stage installs this root-owned setuid probe.
 # It prints its effective UID; no-new-privileges must prevent switching to root.
-probe = Path("/tmp/runtime-setuid-probe")
+probe = Path("/usr/local/lib/runtime-setuid-probe")
 assert probe.stat().st_uid == 0 and probe.stat().st_mode & 0o4000
 assert int(subprocess.check_output([str(probe)], text=True)) == os.getuid()
 for tool in ("node", "python3", "cargo", "gitleaks", "claude", "codex"):
@@ -24,8 +25,8 @@ for tool in ("node", "python3", "cargo", "gitleaks", "claude", "codex"):
     assert target.stat().st_uid == 0, tool
     try:
         descriptor = os.open(target, os.O_WRONLY)  # no truncation or writes
-    except PermissionError:
-        pass
+    except OSError as error:
+        assert error.errno in (errno.EACCES, errno.EROFS), (tool, error)
     else:
         os.close(descriptor)
         raise AssertionError(f"system tool writable: {tool}")

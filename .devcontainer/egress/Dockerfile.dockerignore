@@ -12,3 +12,9 @@
 !.devcontainer/egress/Dockerfile
 !.devcontainer/egress/proxy.py
 !.devcontainer/egress/allowed-hosts.txt
+!.devcontainer/agent-policy.py
+!.devcontainer/policy/
+.devcontainer/policy/**
+!.devcontainer/policy/claude.json
+!.devcontainer/policy/codex.toml
+!.devcontainer/policy/requirements.toml

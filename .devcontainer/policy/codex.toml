@@ -1,0 +1,5 @@
+# The mandatory OS sandbox is the container, checked before it starts any command.
+# These CLI/IDE defaults avoid depending on nested user namespaces.
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+web_search = "disabled"
