@@ -11,3 +11,6 @@ target/
 
 # Editor and OS noise
 .DS_Store
+
+# Personal Claude Code settings
+.claude/settings.local.json
