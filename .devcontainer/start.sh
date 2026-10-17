@@ -1,7 +1,6 @@
 #!/bin/bash
 # Build, start and attach to the dev container from a plain terminal.
 #   --rebuild  rebuild the image from scratch (also how Claude Code gets upgraded)
-#   --docker   privileged mode with nested Docker; see compose.docker.yml first
 #   --claude   run Claude Code directly instead of a shell (tells herdr it's an agent)
 #   --codex    run Codex directly instead of a shell (tells herdr it's an agent)
 #   -- command [args...]  run the given command inside the container
@@ -16,14 +15,15 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 rebuild=false
-docker_mode=false
 agent=""
 command=(bash)
 while [ "$#" -gt 0 ]; do
     arg="$1"
     case "$arg" in
         --rebuild) rebuild=true ;;
-        --docker) docker_mode=true ;;
+        --docker)
+            echo "--docker is no longer supported. Run Docker checks in CI; see .devcontainer/README.md (Docker checks)." >&2
+            exit 64 ;;
         --claude|--codex)
             if [ -n "$agent" ] && [ "$agent" != "${arg#--}" ]; then
                 echo "--claude and --codex are mutually exclusive" >&2; exit 64
@@ -37,7 +37,7 @@ while [ "$#" -gt 0 ]; do
             fi
             command=("$@")
             break ;;
-        *) echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex | -- command [args...]]" >&2; exit 64 ;;
+        *) echo "Usage: $(basename "$0") [--rebuild] [--claude|--codex | -- command [args...]]" >&2; exit 64 ;;
     esac
     shift
 done
@@ -59,9 +59,6 @@ SERVICE="app"
 COMPOSE=(docker compose -p "$COMPOSE_PROJECT"
     -f "$SCRIPT_DIR/docker-compose.yml"
     -f "$SCRIPT_DIR/compose.ssh.yml")
-if [ "$docker_mode" = true ]; then
-    COMPOSE+=(-f "$SCRIPT_DIR/compose.docker.yml")
-fi
 
 USER_UID="$(id -u)"
 USER_GID="$(id -g)"
@@ -100,10 +97,6 @@ if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
     echo -e "${YELLOW}Neither GH_TOKEN nor GITHUB_TOKEN is set: gh inside the container will be unauthenticated.${NC}"
 fi
 
-if [ "$docker_mode" = true ]; then
-    echo -e "${YELLOW}--docker: the container runs privileged. Use it only for sessions that need nested Docker.${NC}"
-fi
-
 # ── Build and start ──────────────────────────────────────────────────────────
 if [ "$rebuild" = true ]; then
     echo -e "${GREEN}Rebuilding the image from scratch...${NC}"
@@ -111,22 +104,8 @@ if [ "$rebuild" = true ]; then
     "${COMPOSE[@]}" up --detach --force-recreate
 else
     # --build is a cache hit unless the Dockerfile changed; `up` recreates the
-    # container only when its image or config changed (e.g. toggling --docker).
+    # container only when its image or config changed.
     "${COMPOSE[@]}" up --detach --build
-fi
-
-if [ "$docker_mode" = true ]; then
-    echo -e "${GREEN}Waiting for dockerd inside the container...${NC}"
-    timeout=90
-    until "${COMPOSE[@]}" exec -T "$SERVICE" docker info &>/dev/null; do
-        timeout=$((timeout - 1))
-        if [ "$timeout" -le 0 ]; then
-            echo -e "${RED}dockerd did not start within 90s. Recent container logs:${NC}" >&2
-            "${COMPOSE[@]}" logs --tail 40 "$SERVICE" >&2 || true
-            exit 1
-        fi
-        sleep 1
-    done
 fi
 
 "${COMPOSE[@]}" exec -T --user vscode "$SERVICE" .devcontainer/postStartCommand.sh

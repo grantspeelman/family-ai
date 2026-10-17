@@ -14,7 +14,6 @@ container keeps running after you exit.
 | `--rebuild` | Rebuild the image from scratch. This is also how Claude Code and Codex get upgraded. |
 | `--claude`  | Run Claude Code directly instead of a shell. Sets `HERDR_AGENT` so [herdr](https://herdr.dev) sees the agent. |
 | `--codex`   | Same, for Codex. |
-| `--docker`  | Privileged mode with nested Docker. Read [Nested Docker](#nested-docker) first. |
 
 Run a specific command by putting it and its arguments after `--`:
 
@@ -83,12 +82,36 @@ finding is redacted in the output.
 Commits made outside the container skip the hook (git prints "Can't find
 lefthook" and lets the commit through), so CI is the backstop for those.
 
-## Nested Docker
+## Docker checks
 
-`start.sh --docker` recreates the container as privileged and starts `dockerd`
-inside it. Use it for the sessions that need Docker, then run `start.sh`
-without the flag to go back to the unprivileged container. VS Code never uses
-this mode.
+Docker-dependent checks run on GitHub Actions runners, outside agent sessions.
+The agent image contains no Docker CLI or daemon, and neither terminal nor
+VS Code sessions receive a host Docker socket, devices, or Docker API access.
+The former `--docker` launcher flag exits with guidance instead of starting a
+container. Do not add a host Docker socket mount as a replacement.
+
+Open or update the pull request to request the `devcontainer` workflow;
+subsequent pushes to that PR branch trigger another run. Inspect results with:
+
+```sh
+gh run list --workflow devcontainer-ci.yml --branch <branch>
+gh run view <run-id>
+gh run view <run-id> --log-failed
+gh pr checks <pr-number>
+```
+
+Use a trusted host session for the push and these commands when publishing
+credentials are unavailable inside the container. The existing `image` and
+`smoke` jobs build and test the image and check the runtime on a disposable
+GitHub-hosted runner. Both are included in the required `ci` gate. These jobs
+use read-only workflow permissions, no repository secrets, and disposable
+smoke-test credentials; no agent session receives the runner's Docker access.
+
+Container isolation depends on the host: native Linux containers share the host
+kernel; Docker Desktop runs its Linux containers inside a VM. Neither boundary
+is a substitute for keeping privileged Docker work outside agent sessions. If
+local Docker checks are needed, run them from a trusted host or a separate
+disposable VM, rather than exposing Docker to the agent container.
 
 ## Changing the image
 
@@ -99,10 +122,12 @@ The image is `ubuntu:26.04`. Most tools come from Ubuntu's archive; `gh` and
 a version test there, so when you bump a pin in the `Dockerfile` (version and
 SHA-256), update its test in the same commit.
 
-`smoke-test.sh` starts a real container the way `start.sh` does and checks it
-end to end: SSH forwarding, Claude settings, the project toolchain, the commit
-hook, nested Docker, and switching back to unprivileged. It needs network access
-(it pulls `hello-world`). It runs in about 30 seconds and cleans up after
-itself, using a throwaway Claude config volume so your login is never touched.
+`smoke-test.sh` starts a standard, unprivileged container and checks it end
+to end: runtime privileges and mounts, SSH forwarding, Claude settings, the
+project toolchain, and the commit hook. It runs from a Docker-capable CI runner
+or trusted host, with throwaway Claude and Codex config volumes and SSH keys.
+It does not mount a Docker socket or start a nested daemon.
 
-CI (`.github/workflows/devcontainer-ci.yml`) runs both on every push to `main` and every PR.
+CI (`.github/workflows/devcontainer-ci.yml`) runs the image and smoke checks on
+every push to `main` and every PR. Launcher tests and effective Compose
+configuration checks run in the existing `image` job without agent logins.

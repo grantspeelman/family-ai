@@ -32,8 +32,13 @@ jobs:
           HOST_SSH_AUTH_SOCK=/dev/null docker compose \
             -f .devcontainer/docker-compose.yml \
             -f .devcontainer/compose.ssh.yml \
-            -f .devcontainer/compose.docker.yml \
             config --quiet
+
+      - name: Launcher tests
+        run: python3 -I .devcontainer/test-start.py
+
+      - name: Entry-point configuration checks
+        run: python3 -I .devcontainer/test-runtime-config.py
 
       - name: Build image
         run: docker build -f .devcontainer/Dockerfile -t "$IMAGE" .
@@ -60,8 +65,8 @@ jobs:
             git --redact --no-banner --verbose .
 
   # Starts the container the way start.sh does and checks it behaves: SSH agent
-  # forwarding, Claude settings, commit hook, project toolchain, nested Docker, and
-  # dropping back to unprivileged. The runner's UID (1001) also exercises the
+  # forwarding, Claude settings, commit hook, project toolchain and runtime
+  # isolation. The runner's UID (1001) also exercises the
   # image's UID remapping, which the default 1000 build above does not.
   smoke:
     runs-on: ubuntu-latest

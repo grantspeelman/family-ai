@@ -1,8 +1,8 @@
 #!/bin/bash
 # End-to-end check of the dev container through the same compose files start.sh
 # uses: builds for the calling user's UID, forwards a throwaway ssh-agent, runs
-# the post-start setup, then exercises nested Docker and dropping back out of it.
-# Runs in CI and locally alike. Needs network access to pull hello-world. It uses
+# the post-start setup, then checks normal tooling and runtime isolation.
+# Runs from a Docker-capable CI runner or trusted host, outside agent sessions. It uses
 # its own compose project, throwaway Claude and Codex config volumes (never your real
 # logins') and a temporary key in a fresh agent, and removes them all on exit.
 set -euo pipefail
@@ -13,15 +13,14 @@ BASE=(docker compose -p "$PROJECT"
     -f "$SCRIPT_DIR/docker-compose.yml"
     -f "$SCRIPT_DIR/compose.ssh.yml"
     -f "$SCRIPT_DIR/smoke-test.compose.yml")
-DOCKER=("${BASE[@]}" -f "$SCRIPT_DIR/compose.docker.yml")
-in_container() { "${DOCKER[@]}" exec -T --user vscode app bash -c "$1"; }
+in_container() { "${BASE[@]}" exec -T --user vscode app bash -c "$1"; }
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "ok - $*"; }
 
 tmp="$(mktemp -d)"
 cleanup() {
-    "${DOCKER[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+    "${BASE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
     [ -n "${SSH_AGENT_PID:-}" ] && kill "$SSH_AGENT_PID" 2>/dev/null || true
     rm -rf "$tmp"
 }
@@ -36,15 +35,29 @@ export USER_UID="$(id -u)" USER_GID="$(id -g)"
 export SMOKE_CLAUDE_VOLUME="$PROJECT-claude-config"
 export SMOKE_CODEX_VOLUME="$PROJECT-codex-config"
 
-echo "# privileged, with nested Docker"
-"${DOCKER[@]}" up --detach --build --quiet-pull
-timeout=90
-until "${DOCKER[@]}" exec -T app docker info >/dev/null 2>&1; do
-    timeout=$((timeout - 1))
-    [ "$timeout" -gt 0 ] || { "${DOCKER[@]}" logs --tail 40 app >&2; fail "dockerd did not start"; }
-    sleep 1
-done
-pass "dockerd started"
+# Do not pass the caller's GitHub authentication into the smoke container.
+unset GH_TOKEN GITHUB_TOKEN
+
+echo "# standard agent runtime"
+"${BASE[@]}" up --detach --build --quiet-pull
+container_id="$("${BASE[@]}" ps -q app)"
+docker inspect "$container_id" | jq -e '
+    .[0] | .HostConfig.Privileged == false
+    and ((.HostConfig.Devices // []) | length == 0)
+    and ((.HostConfig.CapAdd // []) | length == 0)
+    and (.HostConfig.NetworkMode != "host")
+    and (.HostConfig.PidMode != "host")
+    and all(.Mounts[]; .Destination == "/workspace"
+        or .Destination == "/home/vscode/.claude"
+        or .Destination == "/home/vscode/.codex"
+        or .Destination == "/run/ssh-agent.sock")' >/dev/null \
+    || fail "unexpected agent runtime privileges or mounts"
+pass "agent runtime privileges and mounts checked"
+in_container '! command -v docker && ! command -v dockerd && ! command -v containerd' \
+    || fail "Docker binaries present in agent image"
+in_container 'test ! -S /var/run/docker.sock && test ! -S /run/containerd/containerd.sock' \
+    || fail "Docker runtime socket present"
+pass "no Docker binaries or runtime sockets"
 
 in_container '.devcontainer/postStartCommand.sh' >/dev/null
 pass "postStartCommand.sh ran"
@@ -86,16 +99,5 @@ in_container '
     set -e; cd /tmp/t; git rm -qf --cached leak.txt; rm leak.txt
     echo clean > ok.txt; git add ok.txt; git commit -qm clean >/dev/null 2>&1' || fail "clean change was not committed"
 pass "clean change commits normally"
-
-in_container 'docker run --rm --quiet hello-world' | grep -q 'Hello from Docker!' || fail "nested docker run failed"
-pass "nested docker run works"
-
-echo "# back to unprivileged"
-"${BASE[@]}" up --detach
-[ "$(docker inspect "$("${BASE[@]}" ps -q app)" --format '{{.HostConfig.Privileged}}')" = false ] \
-    || fail "container still privileged without compose.docker.yml"
-pass "container recreated unprivileged"
-"${BASE[@]}" exec -T --user vscode app bash -c '! docker info >/dev/null 2>&1' || fail "dockerd running while unprivileged"
-pass "no dockerd while unprivileged"
 
 echo "all smoke tests passed"

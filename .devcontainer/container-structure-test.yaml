@@ -4,13 +4,12 @@
 # fails otherwise.
 #
 # Image design:
-#   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite, gosu and Docker come
+#   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite and gosu come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
 #     gh and gitleaks are checksummed release binaries and pinned exactly.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
-#   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
-#     ENABLE_DOCKER=1 (compose.docker.yml, privileged), then gosu-drops to vscode.
+#   • ENTRYPOINT /entrypoint.sh starts as root and gosu-drops to vscode.
 #   • CLAUDE_CONFIG_DIR and CODEX_HOME are named volumes, so the logins survive rebuilds.
 
 schemaVersion: 2.0.0
@@ -57,10 +56,6 @@ fileContentTests:
   - name: ubuntu base user was renamed, not left alongside vscode
     path: /etc/passwd
     excludedContents: ['^ubuntu:']
-
-  - name: vscode is a member of the docker group (for start.sh --docker)
-    path: /etc/group
-    expectedContents: ['docker:x:\d+:.*vscode']
 
   - name: sudoers grants passwordless sudo to vscode
     path: /etc/sudoers.d/vscode
@@ -146,10 +141,10 @@ commandTests:
     # Deliberately unpinned (see the Dockerfile); just assert the CLI runs.
     exitCode: 0
 
-  - name: docker CLI and daemon installed (daemon only runs with --docker)
+  - name: Docker CLI and daemon are absent from agent image
     command: bash
-    args: ["-c", "docker --version && dockerd --version && containerd --version"]
-    expectedOutput: ['Docker version']
+    args: ["-c", "! command -v docker && ! command -v dockerd && ! command -v containerd"]
+    exitCode: 0
 
   - name: bubblewrap and socat installed (Claude Code's Linux sandbox)
     command: bash

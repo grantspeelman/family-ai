@@ -1,7 +1,6 @@
 # Base definition shared by VS Code and start.sh. It deliberately mounts nothing
 # from the host but this checkout: no ~/.ssh, no ~/.claude, no home directory.
-# start.sh layers compose.ssh.yml (agent forwarding) and, with --docker,
-# compose.docker.yml (privileged nested Docker) on top of it.
+# start.sh layers compose.ssh.yml (agent forwarding) on top of it.
 services:
   app:
     build:
