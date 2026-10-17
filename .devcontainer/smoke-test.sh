@@ -64,6 +64,9 @@ PROBE
 cc "$tmp/probe.c" -o "$tmp/runtime-setuid-probe"
 chmod 4755 "$tmp/runtime-setuid-probe"
 docker cp "$tmp/runtime-setuid-probe" "$container_id:/tmp/runtime-setuid-probe"
+# Docker extraction may clear setuid while assigning ownership. Restore only
+# this harmless fixture's mode using the trusted runner's explicit root exec.
+"${BASE[@]}" exec -T --user 0 app chmod 4755 /tmp/runtime-setuid-probe
 # No --user override: verify the default terminal/IDE container execution user.
 "${BASE[@]}" exec -T app python3 -I /workspace/.devcontainer/test-privileges.py \
     || fail "non-root runtime checks failed"
