@@ -1,6 +1,6 @@
 # 02 — Remove publishing credentials by default
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -35,14 +35,25 @@ sessions credentials that can publish changes or act as the user's SSH identity.
   not receive them through environment variables, mounts, or credential helpers.
 - [ ] Default sessions cannot access a forwarded SSH agent through either entry
   point, including VS Code's automatic forwarding.
-- [ ] Launcher tests prove default startup never invokes `ssh-agent` or `ssh-add`.
+- [x] Launcher tests prove default startup never invokes `ssh-agent` or `ssh-add`.
 - [ ] Edit, test, and local commit workflows succeed without publishing credentials.
-- [ ] A documented host-side publishing workflow succeeds with a disposable local
+- [x] A documented host-side publishing workflow succeeds with a disposable local
   remote fixture; no real push or real credential is needed for automated tests.
-- [ ] Any optional authenticated workflow states its scope, expiry, and trust
+- [x] Any optional authenticated workflow states its scope, expiry, and trust
   boundary, and cannot be enabled by an ordinary agent command inside the container.
 
 ## Review depth
 
 **Close read.** Review every credential transport and both entry points; absence
 of token environment variables alone is insufficient.
+
+## Validation notes
+
+Launcher tests (7), isolated editor launch/preflight tests (3), the local Git
+publishing fixture (1), and effective Compose checks with dummy host tokens (1)
+pass. No authenticated container mode remains. Smoke checks now verify token,
+SSH socket and credential helper absence, plus local build/test/commit behavior.
+Docker runtime checks run in CI; the first, second and fourth acceptance items
+remain open until those checks and a fresh graphical VS Code session verify the
+actual runtime. IDE launch tests use a fake editor and cannot prove the behavior
+of the Dev Containers extension itself.

@@ -28,9 +28,29 @@ argument boundaries. With no command, the launcher opens Bash. Commands named
 `claude` or `codex` set `HERDR_AGENT` for [herdr](https://herdr.dev); the
 `--claude` and `--codex` shortcuts still work, but cannot be combined with `--`.
 
-**VS Code:** *Dev Containers: Reopen in Container*. VS Code builds its own
-container from the same `docker-compose.yml`, separate from the one
-`start.sh` builds.
+**VS Code (trusted Unix host):** run `.devcontainer/start-vscode.sh`, then use
+*Dev Containers: Reopen in Container* in the new window. The launcher installs
+Dev Containers into a disposable editor profile and starts a separate instance
+with a fresh home directory, no inherited credentials or SSH agent, and host Git
+config copying, credential helpers and Docker credential sharing disabled.
+Ordinary Reopen from your existing editor is rejected by a host preflight.
+Do not sign into GitHub, enable Settings Sync, or add credential helpers in this
+profile. Keep the launcher terminal open; the profile is removed after the
+workspace closes. Extensions and editor preferences are intentionally per-session.
+This launcher needs a Unix host with Bash and `code` on PATH, and local Docker
+accessible through its default socket. Remote Docker contexts and Windows hosts
+are not supported by this launcher.
+
+VS Code builds its own container from the same `docker-compose.yml`, separate
+from the one `start.sh` builds. Dev Containers ordinarily shares host Git
+credentials and forwards a running SSH agent; these are host-side features, so
+clearing an environment variable inside the container is insufficient. See
+[VS Code's credential sharing documentation](https://code.visualstudio.com/remote/advancedcontainers/sharing-git-credentials).
+Docker Desktop's host-services SSH socket must also remain absent. Before relying
+on this entry point after an editor upgrade, verify its container has no SSH
+forwarding sockets or Git credential helper. A graphical end-to-end check is
+still required; the automated tests exercise host launch/preflight behavior and
+Compose configuration.
 
 First time only: run `claude` (or `codex`) inside and log in. The logins live in the
 `family-ai-claude-config` and `family-ai-codex-config` volumes, which every container for this repo
@@ -41,12 +61,38 @@ shares, so it survives rebuilds and covers both entry points.
 | | |
 |---|---|
 | **Files** | Only this checkout, at `/workspace`. No host home directory, `~/.ssh` or `~/.claude`. |
-| **SSH** | Your host ssh-agent, forwarded as a socket. `start.sh` starts an agent and runs `ssh-add` if it needs to. The container can use your key to sign, but it can't read or copy the key. GitHub's host keys are pinned in the image. |
-| **GitHub API** | `GH_TOKEN` / `GITHUB_TOKEN`, passed through from the host environment. Use a fine-grained token scoped to this repo. |
+| **SSH** | No host agent forwarding or host keys. The launcher never starts an agent or loads keys. |
+| **GitHub API** | Public unauthenticated queries only; publishing credentials stay on the host. |
 | **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
 | **Network** | Outbound access is not filtered. |
 
 Inside the container the `vscode` user has passwordless `sudo`.
+
+## Publishing reviewed work
+
+Edit, test and commit in the container. Configure a local Git author identity
+with `git config user.name` and `git config user.email` if needed; identity is
+not authentication. Do not run `gh auth login` or place publishing tokens, SSH
+keys, or credential files in the checkout or agent volumes.
+
+After the agent stops, use a trusted host terminal with your normal credentials.
+Review the branch commits and diff, including changes to Git hooks/configuration
+and host-executed files, before publishing. From that reviewed checkout:
+
+```sh
+git log --oneline main..<branch>
+git diff main...<branch>
+git push -u origin <branch>
+gh pr create --base <base-branch> --head <branch> --title '<title>' --body '<description>'
+```
+
+Use an explicit branch and the appropriate base for stacked work. Do not invoke
+publishing commands from an agent process. There is no authenticated container
+mode. `python3 -I .devcontainer/test-publishing.py` verifies the local commit and
+host push sequence against a disposable local bare remote; it does not contact
+GitHub. Recreate existing containers after this change and remove any previously
+saved publishing credentials before using them for agent work. Provider logins
+are managed separately.
 
 ## Project toolchain
 
@@ -100,8 +146,8 @@ gh run view <run-id> --log-failed
 gh pr checks <pr-number>
 ```
 
-Use a trusted host session for the push and these commands when publishing
-credentials are unavailable inside the container. The existing `image` and
+Use a trusted host session for publishing and these commands. The existing
+`image` and
 `smoke` jobs build and test the image and check the runtime on a disposable
 GitHub-hosted runner. Both are included in the required `ci` gate. These jobs
 use read-only workflow permissions, no repository secrets, and disposable
@@ -123,9 +169,10 @@ a version test there, so when you bump a pin in the `Dockerfile` (version and
 SHA-256), update its test in the same commit.
 
 `smoke-test.sh` starts a standard, unprivileged container and checks it end
-to end: runtime privileges and mounts, SSH forwarding, Claude settings, the
+to end: runtime privileges and mounts, credential absence, Claude settings, the
 project toolchain, and the commit hook. It runs from a Docker-capable CI runner
-or trusted host, with throwaway Claude and Codex config volumes and SSH keys.
+or trusted host, with throwaway Claude and Codex config volumes and dummy host
+token values.
 It does not mount a Docker socket or start a nested daemon.
 
 CI (`.github/workflows/devcontainer-ci.yml`) runs the image and smoke checks on

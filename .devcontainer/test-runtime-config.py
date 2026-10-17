@@ -16,11 +16,12 @@ class RuntimeConfigTests(unittest.TestCase):
             files = [files]
         profiles = {
             "vscode": files,
-            "terminal": ["docker-compose.yml", "compose.ssh.yml"],
-            "smoke": ["docker-compose.yml", "compose.ssh.yml", "smoke-test.compose.yml"],
+            "terminal": ["docker-compose.yml"],
+            "smoke": ["docker-compose.yml", "smoke-test.compose.yml"],
         }
         env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
-        env.update(HOST_SSH_AUTH_SOCK="/tmp/test-ssh-agent.sock",
+        env.update(GH_TOKEN="dummy-host-gh-token", GITHUB_TOKEN="dummy-host-github-token",
+                   SSH_AUTH_SOCK="/tmp/test-ssh-agent.sock",
                    SMOKE_CLAUDE_VOLUME="test-claude", SMOKE_CODEX_VOLUME="test-codex")
         for name, compose_files in profiles.items():
             with self.subTest(entry_point=name):
@@ -40,8 +41,8 @@ class RuntimeConfigTests(unittest.TestCase):
                 self.assertNotIn("DOCKER_HOST", environment)
                 self.assertNotIn("ENABLE_DOCKER", environment)
                 allowed = {"/workspace", "/home/vscode/.claude", "/home/vscode/.codex"}
-                if name != "vscode":
-                    allowed.add("/run/ssh-agent.sock")
+                for key in ("GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "HOST_SSH_AUTH_SOCK"):
+                    self.assertNotIn(key, environment)
                 self.assertEqual({mount["target"] for mount in app.get("volumes", [])}, allowed)
 
 

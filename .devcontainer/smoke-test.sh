@@ -1,17 +1,16 @@
 #!/bin/bash
 # End-to-end check of the dev container through the same compose files start.sh
-# uses: builds for the calling user's UID, forwards a throwaway ssh-agent, runs
+# uses: builds for the calling user's UID, runs
 # the post-start setup, then checks normal tooling and runtime isolation.
 # Runs from a Docker-capable CI runner or trusted host, outside agent sessions. It uses
 # its own compose project, throwaway Claude and Codex config volumes (never your real
-# logins') and a temporary key in a fresh agent, and removes them all on exit.
+# logins'), and removes them all on exit.
 set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT="family-ai-smoke-$$"
 BASE=(docker compose -p "$PROJECT"
     -f "$SCRIPT_DIR/docker-compose.yml"
-    -f "$SCRIPT_DIR/compose.ssh.yml"
     -f "$SCRIPT_DIR/smoke-test.compose.yml")
 in_container() { "${BASE[@]}" exec -T --user vscode app bash -c "$1"; }
 
@@ -21,22 +20,17 @@ pass() { echo "ok - $*"; }
 tmp="$(mktemp -d)"
 cleanup() {
     "${BASE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
-    [ -n "${SSH_AGENT_PID:-}" ] && kill "$SSH_AGENT_PID" 2>/dev/null || true
     rm -rf "$tmp"
 }
 trap cleanup EXIT
 
-# A fresh agent holding a throwaway key: never the caller's own agent or keys.
-eval "$(ssh-agent -a "$tmp/agent.sock")" >/dev/null
-ssh-keygen -q -t ed25519 -N '' -f "$tmp/key"
-ssh-add -q "$tmp/key"
-export HOST_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 export USER_UID="$(id -u)" USER_GID="$(id -g)"
 export SMOKE_CLAUDE_VOLUME="$PROJECT-claude-config"
 export SMOKE_CODEX_VOLUME="$PROJECT-codex-config"
 
-# Do not pass the caller's GitHub authentication into the smoke container.
-unset GH_TOKEN GITHUB_TOKEN
+# Dummy host values prove Compose does not transport publishing credentials.
+export GH_TOKEN=dummy-host-gh-token GITHUB_TOKEN=dummy-host-github-token
+export SSH_AUTH_SOCK="$tmp/unforwarded-agent.sock"
 
 echo "# standard agent runtime"
 "${BASE[@]}" up --detach --build --quiet-pull
@@ -49,8 +43,7 @@ docker inspect "$container_id" | jq -e '
     and (.HostConfig.PidMode != "host")
     and all(.Mounts[]; .Destination == "/workspace"
         or .Destination == "/home/vscode/.claude"
-        or .Destination == "/home/vscode/.codex"
-        or .Destination == "/run/ssh-agent.sock")' >/dev/null \
+        or .Destination == "/home/vscode/.codex")' >/dev/null \
     || fail "unexpected agent runtime privileges or mounts"
 pass "agent runtime privileges and mounts checked"
 in_container '! command -v docker && ! command -v dockerd && ! command -v containerd' \
@@ -65,8 +58,12 @@ pass "postStartCommand.sh ran"
 [ "$(in_container 'id -u')" = "$USER_UID" ] || fail "vscode UID does not match host UID $USER_UID"
 pass "vscode runs as host UID $USER_UID"
 
-[ "$(in_container 'ssh-add -l | wc -l')" = 1 ] || fail "forwarded agent does not hold the test key"
-pass "ssh-agent forwarded"
+in_container 'test -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}${SSH_AUTH_SOCK:-}" &&
+    test ! -S /run/ssh-agent.sock && test ! -S /run/host-services/ssh-auth.sock &&
+    test ! -e "$HOME/.config/gh/hosts.yml" &&
+    test -z "$(git config --get-all credential.helper || true)"' \
+    || fail "publishing credentials reached container"
+pass "no publishing tokens, SSH socket or Git credential helper"
 
 [ "$(in_container 'jq -r .permissions.defaultMode "$CLAUDE_CONFIG_DIR/settings.json"')" = bypassPermissions ] \
     || fail "bypassPermissions not set"

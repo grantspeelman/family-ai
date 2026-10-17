@@ -10,9 +10,15 @@
         "anthropic.claude-code"
       ],
       "settings": {
-        "terminal.integrated.defaultProfile.linux": "bash"
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "git.terminalAuthentication": false,
+        "github.gitAuthentication": false
       }
     }
   },
-  "postStartCommand": ".devcontainer/postStartCommand.sh"
+  "postStartCommand": ".devcontainer/postStartCommand.sh",
+  "initializeCommand": [
+    "bash",
+    ".devcontainer/check-vscode-host.sh"
+  ]
 }

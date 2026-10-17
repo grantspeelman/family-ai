@@ -49,7 +49,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# GitHub CLI: authenticates from the GH_TOKEN passed through from the host.
+# GitHub CLI is available for public, unauthenticated queries. Publish on the host.
 ARG GH_VERSION=2.102.0
 ENV GH_SHA256_AMD64=bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386
 ENV GH_SHA256_ARM64=7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484
@@ -121,11 +121,11 @@ RUN npm install -g @openai/codex \
     && npm cache clean --force
 
 # Pin GitHub's SSH host keys (from https://api.github.com/meta) so the first
-# `git push` neither prompts nor trusts whatever answers on port 22.
+# public SSH operations use known host identities.
 COPY .devcontainer/ssh_known_hosts /etc/ssh/ssh_known_hosts
 
-# Create the `vscode` user with the host's UID/GID so bind-mounted files and the
-# forwarded ssh-agent socket are owned by the same user on both sides. The
+# Create the `vscode` user with the host's UID/GID so bind-mounted files
+# are owned by the same user on both sides. The
 # ubuntu base image ships an `ubuntu` user at 1000:1000, which is renamed rather than duplicated.
 RUN set -eux; \
     if [ "${USER_UID}" -eq 0 ] || [ "${USER_GID}" -eq 0 ]; then \

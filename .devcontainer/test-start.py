@@ -10,7 +10,7 @@ START = Path(__file__).with_name("start.sh")
 
 
 class StartTests(unittest.TestCase):
-    def run_start(self, *args):
+    def run_start(self, *args, with_agent=True):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             docker = root / "docker"
@@ -21,17 +21,30 @@ class StartTests(unittest.TestCase):
                 "    log.write(json.dumps([os.environ.get('HERDR_AGENT'), sys.argv[1:]]) + '\\n')\n"
             )
             docker.chmod(0o755)
-            ssh_add = root / "ssh-add"
-            ssh_add.write_text("#!/bin/sh\nexit 0\n")
-            ssh_add.chmod(0o755)
+            for tool in ("ssh-add", "ssh-agent"):
+                stub = root / tool
+                stub.write_text('#!/bin/sh\necho invoked >> "$SSH_COMMAND_LOG"\nexit 97\n')
+                stub.chmod(0o755)
             log = root / "commands"
             env = dict(os.environ, PATH=f"{root}:{os.environ['PATH']}",
-                       SSH_AUTH_SOCK=str(root / "socket"), COMMAND_LOG=str(log))
+                       SSH_AUTH_SOCK=str(root / "socket"), COMMAND_LOG=str(log),
+                       SSH_COMMAND_LOG=str(root / "ssh-commands"))
             env.pop("HERDR_AGENT", None)
+            if not with_agent:
+                env.pop("SSH_AUTH_SOCK", None)
             result = subprocess.run(["bash", str(START), *args], env=env,
                                     capture_output=True, text=True)
+            self.assertFalse((root / "ssh-commands").exists(), "launcher invoked an SSH tool")
             calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
             return result, calls
+
+    def test_start_never_uses_host_agent(self):
+        for with_agent in (False, True):
+            with self.subTest(with_agent=with_agent):
+                result, calls = self.run_start(with_agent=with_agent)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn("unexpected SSH invocation", result.stderr)
+                self.assertFalse(any("compose.ssh.yml" in arg for call in calls for arg in call[1]))
 
     def test_default_shell(self):
         result, calls = self.run_start()
