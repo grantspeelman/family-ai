@@ -24,7 +24,7 @@ Claude (and any other coding agent) opens the repo and finds out how to work in 
 
 ## Acceptance checklist
 
-- [ ] `AGENTS.md` exists, links to `docs/plans/` and the conventions document, and is under about 100 lines. (Exists, links `docs/plans/`, 56 lines. Unticked: the conventions document is delivered by plan 05 and does not exist yet. `AGENTS.md` links the plan, `docs/plans/05-conventions.md`, and says the document arrives with it.)
+- [ ] `AGENTS.md` exists, links to `docs/plans/` and the conventions document, and is under about 100 lines. (Exists, links `docs/plans/`, 54 lines. Unticked: the conventions document is delivered by plan 05 and does not exist yet. `AGENTS.md` links the plan, `docs/plans/05-conventions.md`, and says the document arrives with it.)
 - [x] Every command it gives has been run or checked against the scripts. (It now gives no commands: it describes the commit hook and CI in words and points to `lefthook.yml` and `.devcontainer/README.md`. The hook itself, `lefthook run pre-commit`, was run in the container and passes.)
 - [x] It states the per-PR workflow: start from the plan, restate it, write tests first, implement, run the tests for what changed and show them passing. It says not to sanity-run the whole suite or lint every file, because the commit hook and CI cover that.
 - [x] `.claude/settings.local.json` is gitignored; any committed `.claude/` file is deliberate and contains nothing personal. (`git check-ignore` confirms the repo `.gitignore` rule; nothing under `.claude/` is committed.)

@@ -34,8 +34,6 @@ Write tests first (TDD) and run the tests for the code you are changing. Do not 
 - **On commit:** lefthook (`lefthook.yml`) runs the minimum required checks on the files you changed. It is installed into `.git/hooks` by `.devcontainer/postStartCommand.sh`, so it runs on commits made inside the dev container; commits outside it skip the hook. Never bypass it with `--no-verify`. If it blocks a commit, fix the finding; any allowlist entry needs a written reason.
 - **On the PR:** CI runs the full checks, so whatever the hook does not cover is caught there.
 
-Today the hook runs only the secret scan, and there is no test suite yet. Each PR that adds a check or a test suite says how to run it in its own plan.
-
 ## Per-PR workflow
 
 Plans are numbered. Each builds on the plans listed under its "Builds on", and each lands as its own PR, stacked on the previous one (branches look like `pr0/NN-slug`). Each plan also states a review depth, close read or skim, which tells the human reviewer how closely to read; `docs/plans/README.md` explains it.
