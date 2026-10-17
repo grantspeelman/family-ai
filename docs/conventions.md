@@ -41,7 +41,9 @@ For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it o
 
 ## Testing bash scripts
 
-Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. CI runs every tracked `*.bats` file automatically (the `image` job finds them with `git ls-files` and runs them in the built image, so the same pinned bats-core), so a new test needs no workflow change. The file must be committed (tracked) to be found, and CI fails if it finds none. See [plan 14](plans/14-bats-core.md) and [plan 15](plans/15-bats-ci.md).
+Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. CI runs every tracked `*.bats` file automatically (the `image` job finds them with `git ls-files` and runs them in the built image, so the same pinned bats-core), so a new test needs no workflow change. The file must be committed (tracked) to be found, and CI fails if it finds none. See [plan 14](plans/14-bats-core.md), [plan 15](plans/15-bats-ci.md) and [plan 16](plans/16-bats-script-tests.md).
+
+Covered today: `.devcontainer/start.sh`, `postStartCommand.sh`, `entrypoint.sh`, the token-file check, and `.lefthook/placeholder.sh`. Tests shim external commands (`docker`, `ssh-agent` and so on) and use temp dirs, never the real `HOME`. `.devcontainer/smoke-test.sh` is the deliberate exception: it builds and starts a real container, so it needs Docker and a network and CI runs it as its own step.
 
 ## Workflow safety
 
