@@ -2,6 +2,8 @@
 # Build, start and attach to the dev container from a plain terminal.
 #   --rebuild  rebuild the image from scratch (also how Claude Code gets upgraded)
 #   --docker   privileged mode with nested Docker; see compose.docker.yml first
+#   --claude   run Claude Code directly instead of a shell (tells herdr it's an agent)
+#   --codex    run Codex directly instead of a shell (tells herdr it's an agent)
 set -euo pipefail
 
 GREEN='\033[0;32m'
@@ -14,11 +16,17 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 rebuild=false
 docker_mode=false
+agent=""
 for arg in "$@"; do
     case "$arg" in
         --rebuild) rebuild=true ;;
         --docker) docker_mode=true ;;
-        *) echo "Usage: $(basename "$0") [--rebuild] [--docker]" >&2; exit 64 ;;
+        --claude|--codex)
+            if [ -n "$agent" ] && [ "$agent" != "${arg#--}" ]; then
+                echo "--claude and --codex are mutually exclusive" >&2; exit 64
+            fi
+            agent="${arg#--}" ;;
+        *) echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex]" >&2; exit 64 ;;
     esac
 done
 
@@ -109,4 +117,9 @@ printf -v stop_command '%q ' "${COMPOSE[@]}"
 echo -e "${GREEN}The container outlives this shell: rerun this script to get back in.${NC}"
 echo -e "${GREEN}Stop it with: ${stop_command}down${NC}"
 
+if [ -n "$agent" ]; then
+    # herdr finds agents by the pane's host-side foreground process, which here is
+    # docker, so HERDR_AGENT on this command (not inside the container) names it.
+    HERDR_AGENT="$agent" exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" "$agent"
+fi
 exec "${COMPOSE[@]}" exec --user vscode "$SERVICE" bash

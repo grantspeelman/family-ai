@@ -11,15 +11,17 @@ container keeps running after you exit.
 
 | Flag        | Effect |
 |-------------|--------|
-| `--rebuild` | Rebuild the image from scratch. This is also how Claude Code gets upgraded. |
+| `--rebuild` | Rebuild the image from scratch. This is also how Claude Code and Codex get upgraded. |
+| `--claude`  | Run Claude Code directly instead of a shell. Sets `HERDR_AGENT` so [herdr](https://herdr.dev) sees the agent. |
+| `--codex`   | Same, for Codex. |
 | `--docker`  | Privileged mode with nested Docker. Read [Nested Docker](#nested-docker) first. |
 
 **VS Code:** *Dev Containers: Reopen in Container*. VS Code builds its own
 container from the same `docker-compose.yml`, separate from the one
 `start.sh` builds.
 
-First time only: run `claude` inside and log in. The login lives in the
-`family-ai-claude-config` volume, which every container for this repo
+First time only: run `claude` (or `codex`) inside and log in. The logins live in the
+`family-ai-claude-config` and `family-ai-codex-config` volumes, which every container for this repo
 shares, so it survives rebuilds and covers both entry points.
 
 ## What the container can reach
