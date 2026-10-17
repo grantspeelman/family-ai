@@ -58,8 +58,12 @@ exists. There are no backing services: SQLite is a file on the app's volume.
 ## Commit checks
 
 The image ships `lefthook` and `gitleaks`, and `postStartCommand.sh` installs
-the git hooks. The hook configuration (`lefthook.yml`) and the CI secret scan
-are added in later PRs.
+the git hooks. The hook configuration (`lefthook.yml`) runs `gitleaks` on
+staged changes before every commit made inside the container. A commit that
+contains a secret is blocked and the finding is redacted in the output.
+
+Commits made outside the container skip the hook (git prints "Can't find
+lefthook" and lets the commit through), so CI is the backstop for those.
 
 ## Nested Docker
 
@@ -78,8 +82,9 @@ a version test there, so when you bump a pin in the `Dockerfile` (version and
 SHA-256), update its test in the same commit.
 
 `smoke-test.sh` starts a real container the way `start.sh` does and checks it
-end to end: SSH forwarding, Claude settings, the project toolchain, nested Docker, and switching back to unprivileged. It needs network access (it pulls `hello-world`). It runs in about 30 seconds
-and cleans up after itself, using a throwaway Claude config volume so your login
-is never touched.
+end to end: SSH forwarding, Claude settings, the project toolchain, the commit
+hook, nested Docker, and switching back to unprivileged. It needs network access
+(it pulls `hello-world`). It runs in about 30 seconds and cleans up after
+itself, using a throwaway Claude config volume so your login is never touched.
 
-A later PR adds CI that runs both on every push to `main` and every PR.
+CI (`.github/workflows/devcontainer-ci.yml`) runs both on every push to `main` and every PR.

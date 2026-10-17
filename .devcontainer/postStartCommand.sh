@@ -6,9 +6,9 @@ set -euo pipefail
 
 config_dir="${CLAUDE_CONFIG_DIR:?CLAUDE_CONFIG_DIR is set in the Dockerfile}"
 
-# Git hooks: installs whatever lefthook configuration the checkout has.
+# Git hooks: gitleaks on every commit (see /lefthook.yml).
 if [ -d /workspace/.git ]; then
-  lefthook install >/dev/null 2>&1 || true
+  lefthook install
 fi
 
 # Permission prompts off by default. This is the container's own Claude config,

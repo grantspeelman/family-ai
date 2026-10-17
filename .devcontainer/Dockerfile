@@ -76,7 +76,7 @@ RUN set -eux; \
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${ARCH}"; \
     gh --version
 
-# gitleaks: secret scanner, run by the pre-commit hook once it is configured.
+# gitleaks: run by the lefthook pre-commit hook so secrets never reach a commit.
 ARG GITLEAKS_VERSION=8.30.1
 ENV GITLEAKS_SHA256_AMD64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 ENV GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
@@ -94,7 +94,7 @@ RUN set -eux; \
     rm /tmp/gitleaks.tar.gz; \
     gitleaks version
 
-# lefthook: git hook runner (hook configuration lands in a later PR).
+# lefthook: git hook runner, configured by /lefthook.yml.
 ARG LEFTHOOK_VERSION=2.1.15
 ENV LEFTHOOK_SHA256_AMD64=df981b477c236546435047fb8c8ee1f6f902e17faebb1b07b6bf2165832e8fe3
 ENV LEFTHOOK_SHA256_ARM64=f3c881e1b6aa7f0461970173b1d692e0eb026bddfcd051cc87f636bf9a9782e0

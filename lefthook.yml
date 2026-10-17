@@ -1,0 +1,5 @@
+# Installed into .git/hooks by .devcontainer/postStartCommand.sh.
+pre-commit:
+  commands:
+    gitleaks:
+      run: gitleaks git --pre-commit --staged --redact --no-banner --verbose

@@ -2,7 +2,7 @@
 # End-to-end check of the dev container through the same compose files start.sh
 # uses: builds for the calling user's UID, forwards a throwaway ssh-agent, runs
 # the post-start setup, then exercises nested Docker and dropping back out of it.
-# Runs in CI (added in a later PR) and locally alike. Needs network access to pull hello-world. It uses
+# Runs in CI and locally alike. Needs network access to pull hello-world. It uses
 # its own compose project, a throwaway Claude config volume (never your real
 # login's) and a temporary key in a fresh agent, and removes them all on exit.
 set -euo pipefail
@@ -68,6 +68,23 @@ pass "cargo build, test, clippy and fmt work"
 
 [ "$(in_container "sqlite3 :memory: 'select 21*2'")" = 42 ] || fail "sqlite3 did not answer"
 pass "sqlite3 works"
+
+in_container 'test -x /workspace/.git/hooks/pre-commit' || fail "lefthook pre-commit hook not installed"
+pass "pre-commit hook installed"
+
+in_container '
+    set -e; git init -q /tmp/t; cp /workspace/lefthook.yml /tmp/t/; cd /tmp/t
+    git config user.email smoke@example.com; git config user.name smoke; lefthook install >/dev/null
+    printf "token = \"ghp_%s\"\n" "$(head -c 300 /dev/urandom | tr -dc A-Za-z0-9 | head -c 36)" > leak.txt
+    git add leak.txt
+    if out="$(git commit -qm leak 2>&1)"; then echo "commit succeeded" >&2; exit 1; fi
+    printf "%s\n" "$out" | grep -q "leaks found"' || fail "gitleaks hook did not block a token"
+pass "gitleaks hook blocks a token"
+
+in_container '
+    set -e; cd /tmp/t; git rm -qf --cached leak.txt; rm leak.txt
+    echo clean > ok.txt; git add ok.txt; git commit -qm clean >/dev/null 2>&1' || fail "clean change was not committed"
+pass "clean change commits normally"
 
 in_container 'docker run --rm --quiet hello-world' | grep -q 'Hello from Docker!' || fail "nested docker run failed"
 pass "nested docker run works"
