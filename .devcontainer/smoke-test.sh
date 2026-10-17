@@ -55,7 +55,8 @@ echo "# standard agent runtime"
 "${BASE[@]}" up --detach --build --quiet-pull
 container_id="$("${BASE[@]}" ps -q app)"
 docker inspect "$container_id" | jq -e '
-    .[0] | .HostConfig.Privileged == false
+    .[0] | .HostConfig.ReadonlyRootfs == true
+    and .HostConfig.Privileged == false
     and ((.HostConfig.Devices // []) | length == 0)
     and ((.HostConfig.CapAdd // []) | length == 0)
     and (.Config.User == "vscode")
@@ -70,6 +71,7 @@ docker inspect "$container_id" | jq -e '
     and all(.Mounts[]; .Destination == "/workspace"
         or (.Destination == "/opt/family-ai-controls" and .RW == false)
         or .Destination == "/home/vscode/.claude"
+        or (.Type == "tmpfs" and (.Destination == "/tmp" or .Destination == "/home/vscode"))
         or (.Destination == "/run/egress" and .RW == false))' >/dev/null \
     || fail "unexpected agent runtime privileges or mounts"
 pass "agent runtime privileges and mounts checked"
@@ -116,9 +118,10 @@ in_container 'test -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}${SSH_AUTH_SOCK:-}" &&
     || fail "publishing credentials reached container"
 pass "no publishing tokens, SSH socket or Git credential helper"
 
-[ "$(in_container 'jq -r .permissions.defaultMode "$CLAUDE_CONFIG_DIR/settings.json"')" = bypassPermissions ] \
-    || fail "bypassPermissions not set"
-pass "Claude defaults to bypassPermissions"
+in_container 'python3 -I /usr/local/lib/agent-policy.py &&
+    test "$(jq -r .permissions.defaultMode /etc/claude-code/managed-settings.json)" = dontAsk' \
+    || fail "agent policy or mandatory outer sandbox unavailable"
+pass "managed policy and mandatory outer sandbox checked"
 
 # A throwaway crate proves the Rust toolchain end to end without touching the
 # checkout or needing the network: build, test, lint, format and a SQLite round trip.
@@ -169,6 +172,7 @@ for name in ('claude', 'codex'):
 assert not pathlib.Path('/workspace/.env').exists()
 subprocess.run(['cargo', 'new', '--quiet', '--vcs', 'none', '/tmp/state-crate'], check=True)
 subprocess.run(['cargo', 'test', '--quiet', '--manifest-path', '/tmp/state-crate/Cargo.toml'], check=True)
+subprocess.run(['python3', '-I', '/workspace/.devcontainer/test-agent-runtime.py'], check=True)
 for command in ('claude', 'codex'):
     subprocess.run([command, '--version'], check=True)
 STATE
@@ -179,6 +183,17 @@ STATE
       || fail "unexpected provider mounts for $selected"
 done
 pass "selected provider and shell mounts, dummy markers, lifecycle and CLI tools checked"
+
+# The supported outer-sandbox exception must never turn into an unrestricted
+# session when its mandatory read-only boundary is missing.
+printf 'services:\n  app:\n    read_only: false\n' > "$tmp/missing-boundary.yml"
+if "${BASE[@]}" -f "$tmp/missing-boundary.yml" run --rm --no-deps -T app \
+    touch /workspace/must-not-run > "$tmp/refused.log" 2>&1; then
+    fail "session accepted a missing outer boundary"
+fi
+rg -q 'Agent boundary refused' "$tmp/refused.log" || fail "unexpected startup failure"
+[ ! -e "$WORKSPACE_SOURCE/must-not-run" ] || fail "requested command ran without boundary"
+pass "missing mandatory sandbox refuses command without fallback"
 
 # Losing the gateway cannot reopen direct egress. New sessions fail closed.
 "${BASE[@]}" stop egress >/dev/null

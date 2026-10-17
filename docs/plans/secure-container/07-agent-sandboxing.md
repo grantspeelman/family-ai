@@ -1,6 +1,6 @@
 # 07 — Verify agent sandbox enforcement
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -40,17 +40,36 @@ fallback. Keep the outer container controls authoritative.
   settings checked against its installed version and upstream documentation.
 - [ ] Harmless fixture commands demonstrate denied sensitive reads, writes outside
   allowed paths, and unexpected network destinations for both agents.
-- [ ] Relevant native file tools and enabled external tools are evaluated, with
+- [x] Relevant native file tools and enabled external tools are evaluated, with
   any enforcement differences explicitly documented and scoped.
-- [ ] Sandbox initialization failure does not execute the requested command in
+- [x] Sandbox initialization failure does not execute the requested command in
   an unrestricted fallback; a negative test demonstrates the behavior.
-- [ ] Agent-writable configuration changes cannot remove mandatory outer controls.
+- [x] Agent-writable configuration changes cannot remove mandatory outer controls.
 - [ ] Representative edit/build/test/commit work succeeds in terminal and supported
   IDE sessions, with manual authenticated checks distinguished from CI tests.
-- [ ] Relevant tests replace assertions that merely require permission bypass;
+- [x] Relevant tests replace assertions that merely require permission bypass;
   required CI jobs include the new focused checks.
 
 ## Review depth
 
 **Close read.** Review actual enforcement across shell and non-shell tools,
 configuration precedence, sandbox failures, and any compatibility exceptions.
+
+## Implementation notes
+
+This plan uses the explicit equivalent-outer-enforcement exception: both CLIs
+run inside a read-only, non-root container with disposable writable development
+paths and externally enforced networking. Nested user namespaces are not
+required and runtime capabilities are not broadened. The image entrypoint
+refuses to execute its command when mandatory OS boundaries are absent.
+System agent policies replace Claude's forced bypass mode and disable newly
+provisioned external integrations. Native file tools and local tool subprocesses
+share the outer boundary; remote tool effects and the selected agent's own login
+are not claimed to be isolated from that agent.
+
+Focused policy and effective Compose tests pass locally. Actual container probes
+are included in the existing required smoke job and await Docker-capable CI.
+The CLI semantics were checked with empty provider homes against Codex 0.163.0
+and Claude Code 2.1.300 and current official documentation. Authenticated terminal
+and IDE edit/build/test/commit acceptance remains unrun; the related checklist
+items stay open. See the dev container README for commands and exact scope.

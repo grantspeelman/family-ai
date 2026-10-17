@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Never bootstrap as root or repair existing volumes with privilege escalation.
 [ "$(id -u)" -ne 0 ] || { echo 'Runtime must use the development user.' >&2; exit 1; }
+mkdir -p "$CLAUDE_CONFIG_DIR" "$CODEX_HOME"
 for directory in /workspace "$CLAUDE_CONFIG_DIR" "$CODEX_HOME"; do
     [ -w "$directory" ] || {
         echo "Development directory is not writable: $directory. Recreate a disposable volume or have the trusted host repair ownership; see .devcontainer/README.md." >&2
@@ -31,4 +32,4 @@ else:
 PYRELAY
 
 # Docker-dependent checks run on the CI runner, outside agent sessions.
-exec "$@"
+exec python3 -I /usr/local/lib/agent-policy.py -- "$@"

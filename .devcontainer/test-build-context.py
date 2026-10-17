@@ -18,7 +18,9 @@ for installed in (False, True):
         for name in ('.env', '.env.local', '.git/config', 'secrets/key.pem',
                      '.devcontainer/.env', '.devcontainer/secret.key',
                      '.devcontainer/egress/.env', '.devcontainer/egress/secret.key',
-                     '.devcontainer/egress/nested/private.key', 'unrelated.txt'):
+                     '.devcontainer/egress/nested/private.key',
+                     '.devcontainer/policy/secret.key', '.devcontainer/policy/.env',
+                     'unrelated.txt'):
             path = context / name
             path.parent.mkdir(exist_ok=True, parents=True)
             path.write_text('dummy-marker-never-copy')
@@ -32,7 +34,9 @@ for installed in (False, True):
         copied = {str(path.relative_to(output / 'context')) for path in (output / 'context').rglob('*')
                   if path.is_file()}
         assert copied == {'.devcontainer/Dockerfile', '.devcontainer/entrypoint.sh',
-                          '.devcontainer/runtime-setuid-probe.c',
+                          '.devcontainer/runtime-setuid-probe.c', '.devcontainer/agent-policy.py',
+                          '.devcontainer/policy/claude.json', '.devcontainer/policy/codex.toml',
+                          '.devcontainer/policy/requirements.toml',
                           '.devcontainer/ssh_known_hosts', '.devcontainer/egress/Dockerfile',
                           '.devcontainer/egress/proxy.py', '.devcontainer/egress/allowed-hosts.txt'}, copied
 print('ordinary and installed build contexts include only required image inputs')

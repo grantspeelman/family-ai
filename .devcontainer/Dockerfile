@@ -158,6 +158,10 @@ WORKDIR /workspace
 
 COPY .devcontainer/egress/proxy.py /usr/local/lib/egress-proxy.py
 COPY .devcontainer/entrypoint.sh /entrypoint.sh
+COPY .devcontainer/agent-policy.py /usr/local/lib/agent-policy.py
+COPY .devcontainer/policy/claude.json /etc/claude-code/managed-settings.json
+COPY .devcontainer/policy/codex.toml /etc/codex/config.toml
+COPY .devcontainer/policy/requirements.toml /etc/codex/requirements.toml
 RUN chmod +x /entrypoint.sh
 # No runtime ownership repair or privileged bootstrap.
 USER vscode
@@ -167,10 +171,10 @@ CMD ["sleep", "infinity"]
 # Only disposable smoke containers include this harmless effective-UID probe.
 FROM development AS smoke
 USER root
-COPY .devcontainer/runtime-setuid-probe.c /tmp/runtime-setuid-probe.c
-RUN cc /tmp/runtime-setuid-probe.c -o /tmp/runtime-setuid-probe \
-    && chmod 4755 /tmp/runtime-setuid-probe \
-    && rm /tmp/runtime-setuid-probe.c
+COPY .devcontainer/runtime-setuid-probe.c /usr/local/lib/runtime-setuid-probe.c
+RUN cc /usr/local/lib/runtime-setuid-probe.c -o /usr/local/lib/runtime-setuid-probe \
+    && chmod 4755 /usr/local/lib/runtime-setuid-probe \
+    && rm /usr/local/lib/runtime-setuid-probe.c
 USER vscode
 
 # Default terminal/editor image inherits no files from the smoke stage.
