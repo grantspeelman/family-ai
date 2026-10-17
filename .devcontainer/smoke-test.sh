@@ -54,7 +54,7 @@ docker inspect "$container_id" | jq -e '
         or (.Destination == "/run/egress" and .RW == false))' >/dev/null \
     || fail "unexpected agent runtime privileges or mounts"
 pass "agent runtime privileges and mounts checked"
-# Compile on the trusted runner; Docker copies it root-owned with its setuid mode.
+# Compile on the trusted runner and preserve explicit root ownership on copy.
 # The probe only reports effective UID and has no privileged side effects.
 cat > "$tmp/probe.c" <<'PROBE'
 #include <stdio.h>
@@ -62,8 +62,9 @@ cat > "$tmp/probe.c" <<'PROBE'
 int main(void) { printf("%lu\n", (unsigned long)geteuid()); return 0; }
 PROBE
 cc "$tmp/probe.c" -o "$tmp/runtime-setuid-probe"
+sudo chown 0:0 "$tmp/runtime-setuid-probe"
 chmod 4755 "$tmp/runtime-setuid-probe"
-docker cp "$tmp/runtime-setuid-probe" "$container_id:/tmp/runtime-setuid-probe"
+docker cp --archive "$tmp/runtime-setuid-probe" "$container_id:/tmp/runtime-setuid-probe"
 # Docker extraction may clear setuid while assigning ownership. Restore only
 # this harmless fixture's mode using the trusted runner's explicit root exec.
 "${BASE[@]}" exec -T --user 0 app chmod 4755 /tmp/runtime-setuid-probe
