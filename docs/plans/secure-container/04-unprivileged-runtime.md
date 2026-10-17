@@ -1,6 +1,6 @@
 # 04 — Run without privilege escalation
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -42,10 +42,30 @@ system-installed tools, or weaken the outer isolation policy.
 - [ ] Fresh config/cache volumes are usable without restoring general sudo access.
 - [ ] Local hooks and representative build/test commands work with correct file
   ownership and the chosen resource limits.
-- [ ] Any rootless/user-namespace option and host prerequisites are documented;
+- [x] Any rootless/user-namespace option and host prerequisites are documented;
   unsupported setups fail clearly without silently relaxing isolation.
 
 ## Review depth
 
 **Close read.** Review effective runtime identity and privilege restrictions,
 including entrypoint behavior, volume initialization, and compatibility exceptions.
+
+## Validation evidence
+
+- Focused editor launcher tests and effective Compose configuration tests pass.
+  Tests were added first and failed against the earlier runtime configuration.
+- Shared Compose and image metadata require direct `vscode` execution, all
+  capabilities dropped, `no-new-privileges`, 4 CPUs, 8 GiB and 512 processes.
+- The existing CI smoke job now checks effective Docker settings, process status,
+  sudo denial, root-owned tool write denial, a harmless root-owned setuid probe,
+  and fresh-volume/workspace ownership. Existing Rust build/test and hook checks
+  exercise the same bounded runtime.
+- Runtime acceptance items remain unchecked pending Docker-capable CI. A live
+  graphical editor session is also required before claiming editor acceptance.
+- Rootless/user-namespace prerequisites and unsupported editor socket behavior
+  are documented in `.devcontainer/README.md`; no host settings are changed.
+
+- The harmless setuid fixture is compiled root-owned during the smoke-only image
+  stage. Normal terminal/editor images use the final development-derived stage,
+  which excludes the fixture; image structure tests verify its absence. Smoke
+  setup does not copy files or change ownership/mode inside a running container.

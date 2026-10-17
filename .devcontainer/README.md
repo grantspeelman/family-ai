@@ -64,9 +64,48 @@ shares, so it survives rebuilds and covers both entry points.
 | **SSH** | No host agent forwarding or host keys. The launcher never starts an agent or loads keys. |
 | **GitHub API** | Public unauthenticated queries only; publishing credentials stay on the host. |
 | **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
-| **Network** | Outbound access is not filtered. |
+| **Network** | Loopback and approved HTTPS destinations through the separate gateway. |
 
-Inside the container the `vscode` user has passwordless `sudo`.
+The application, its relay, terminal shells and editor commands start directly as
+`vscode`. The user has no supplementary groups or sudo grant. Runtime capabilities
+are dropped, `no-new-privileges` prevents setuid execution from gaining privileges,
+and Docker's default seccomp and host security profiles remain enabled. System
+tools are installed as root at image build time; rebuild to update them. Install
+project dependencies and build outputs in the checkout, user home or `/tmp`.
+
+The application is limited to 4 CPUs, 8 GiB of memory and 512 processes/threads.
+These bounds allow the representative Rust build/test and hook checks in CI;
+large future builds may need a reviewed adjustment. A host must have enough
+resources available; limits do not reserve memory. Keep the bounds in the shared
+Compose definition so terminal and editor sessions use the same policy.
+
+Fresh named config volumes inherit `vscode` ownership from the built image.
+Existing volumes keep their ownership: changing the host UID does not migrate
+stored data. Startup rejects unwritable workspace/config directories. Recreate
+disposable volumes, or stop the containers and have a trusted host administrator
+repair retained volume ownership to the configured UID/GID. Do not enable runtime
+sudo or run the app as root to repair them. Terminal builds use the calling host
+UID/GID; the isolated editor launcher passes the same build arguments and disables
+Dev Containers' runtime UID rewriting. Start the editor as a non-root host user.
+
+### Host namespace options
+
+Host rootless Docker and daemon user-namespace remapping are additional host
+protections worth evaluating in a separate disposable host. They map container
+IDs into host ranges, which can make existing bind-mounted checkout/config volume
+ownership incompatible with the image's host-UID strategy. Neither mode is enabled
+or reconfigured by these launchers. The editor launcher currently requires local
+Docker through the default socket, so rootless Docker's per-user socket is not a
+supported editor configuration. Rootless daemon deployments also need working
+cgroup delegation to enforce the resource limits; verify effective limits on the
+host before use. Daemon user-namespace remapping requires an administrator-managed
+subordinate UID/GID range and matching bind-mount ownership.
+
+The supported acceptance path is the normal local Docker daemon (or Docker
+Desktop Linux VM) with writable host-UID bind mounts. Namespace configurations
+outside that path need their own smoke run and editor acceptance check. An
+unwritable mount or unavailable engine must fail rather than silently disable
+namespace isolation, seccomp, capability drops or resource limits.
 
 ## Publishing reviewed work
 
@@ -170,7 +209,10 @@ SHA-256), update its test in the same commit.
 
 `smoke-test.sh` starts a standard, unprivileged container and checks it end
 to end: runtime privileges and mounts, credential absence, Claude settings, the
-project toolchain, and the commit hook. It runs from a Docker-capable CI runner
+project toolchain, the commit hook, direct non-root identity, dropped capabilities,
+active seccomp, no-new-privileges and a harmless root-owned setuid probe.
+The probe is baked into a smoke-only build stage; default terminal/editor images
+exclude it, and smoke setup requires no runtime privilege escalation. It runs from a Docker-capable CI runner
 or trusted host, with throwaway Claude and Codex config volumes and dummy host
 token values.
 It does not mount a Docker socket or start a nested daemon.

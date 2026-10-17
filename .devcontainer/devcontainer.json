@@ -5,6 +5,8 @@
   "overrideCommand": false,
   "workspaceFolder": "/workspace",
   "remoteUser": "vscode",
+  "containerUser": "vscode",
+  "updateRemoteUserUID": false,
   "customizations": {
     "vscode": {
       "extensions": [

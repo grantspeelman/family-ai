@@ -4,12 +4,12 @@
 # fails otherwise.
 #
 # Image design:
-#   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite and gosu come
+#   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
 #     gh and gitleaks are checksummed release binaries and pinned exactly.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout ownership lines up.
-#   • ENTRYPOINT /entrypoint.sh starts as root and gosu-drops to vscode.
+#   • ENTRYPOINT /entrypoint.sh and all runtime commands start as vscode.
 #   • CLAUDE_CONFIG_DIR and CODEX_HOME are named volumes, so the logins survive rebuilds.
 
 schemaVersion: 2.0.0
@@ -18,7 +18,7 @@ metadataTest:
   workdir: "/workspace"
   entrypoint: ["/entrypoint.sh"]
   cmd: ["sleep", "infinity"]
-  user: root
+  user: vscode
   envVars:
     - key: CLAUDE_CONFIG_DIR
       value: /home/vscode/.claude
@@ -28,6 +28,10 @@ metadataTest:
       value: "1"
 
 fileExistenceTests:
+  - name: smoke setuid fixture is absent from the default image
+    path: /tmp/runtime-setuid-probe
+    shouldExist: false
+
   - name: workspace mount point exists
     path: /workspace
     shouldExist: true
@@ -56,10 +60,6 @@ fileContentTests:
   - name: ubuntu base user was renamed, not left alongside vscode
     path: /etc/passwd
     excludedContents: ['^ubuntu:']
-
-  - name: sudoers grants passwordless sudo to vscode
-    path: /etc/sudoers.d/vscode
-    expectedContents: ['vscode ALL=\(ALL\) NOPASSWD: ALL']
 
   - name: GitHub SSH host keys are pinned
     path: /etc/ssh/ssh_known_hosts
@@ -124,10 +124,10 @@ commandTests:
     args: ["version"]
     expectedOutput: ['2\.1\.15']
 
-  - name: gosu is 1.19 (Ubuntu 26.04 archive)
-    command: gosu
-    args: ["--version"]
-    expectedOutput: ['1\.19']
+  - name: no supplementary privileged groups or sudo elevation
+    command: bash
+    args: ['-c', 'test "$(id -Gn)" = vscode && ! sudo -n true']
+    exitCode: 0
 
   - name: claude CLI available
     command: claude
