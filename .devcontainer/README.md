@@ -43,11 +43,54 @@ shares, so it survives rebuilds and covers both entry points.
 |---|---|
 | **Files** | Only this checkout, at `/workspace`. No host home directory, `~/.ssh` or `~/.claude`. |
 | **SSH** | Your host ssh-agent, forwarded as a socket. `start.sh` starts an agent and runs `ssh-add` if it needs to. The container can use your key to sign, but it can't read or copy the key. GitHub's host keys are pinned in the image. |
-| **GitHub API** | `GH_TOKEN` / `GITHUB_TOKEN`, passed through from the host environment. Use a fine-grained token scoped to this repo. |
+| **GitHub API** | A fine-grained token for this repo only. It comes from a file on the host, outside the repo. See [GitHub token](#github-token). |
 | **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
 | **Network** | Outbound access is not filtered. |
 
 Inside the container the `vscode` user has passwordless `sudo`.
+
+## GitHub token
+
+The token comes from a file on the host, outside the repo:
+`~/.config/family-ai/gh.env`, a single line `GH_TOKEN=<token>`. Compose reads it
+through `env_file` in `docker-compose.yml`, so `start.sh` and VS Code use the
+same file. The file is optional: without it the container starts and `gh` is
+unauthenticated. The long `env_file` form needs Docker Compose 2.24 or newer.
+A `GH_TOKEN` exported in your shell or placed in `.devcontainer/.env` is no
+longer passed into the container; use the file. `${HOME}` is expanded by
+Compose from the environment it runs in, so on a non-Linux host or a
+GUI-launched VS Code it may differ from your shell's and the file may not be
+found. The token is never printed.
+
+**Create the token** (GitHub, Settings, Developer settings, Fine-grained personal
+access tokens):
+
+- Resource owner: the account that owns the repository.
+- Expiration: 30 days.
+- Repository access: only this repository.
+- Permissions: Metadata (read), Contents (read and write), Pull requests (read
+  and write), Issues (read and write, if agents need issues), Actions (read),
+  Checks (read), Commit statuses (read). Add Workflows (read and write) only when
+  agents must edit workflow files.
+- Do not grant Administration, Secrets, Environments, Pages or Webhooks.
+
+**Store it** without putting it in shell history (the prompt hides what you
+type):
+
+```sh
+mkdir -p ~/.config/family-ai && chmod 700 ~/.config/family-ai
+(umask 077; read -rs T && printf 'GH_TOKEN=%s\n' "$T" > ~/.config/family-ai/gh.env; unset T)
+```
+
+The directory should be mode 700 and the file mode 600; `start.sh` warns if not.
+
+**Renew every 30 days.** Create a new token, rewrite the file with the command
+above, restart with `.devcontainer/start.sh`, then delete the old token on
+GitHub. The container takes its environment when it is created, so it must be
+restarted after a rotation (for VS Code, rebuild or reopen the container).
+
+If the file is missing, `start.sh` warns that `gh` will be unauthenticated and
+points here.
 
 ## Project toolchain
 
@@ -105,4 +148,8 @@ hook, nested Docker, and switching back to unprivileged. It needs network access
 (it pulls `hello-world`). It runs in about 30 seconds and cleans up after
 itself, using a throwaway Claude config volume so your login is never touched.
 
-CI (`.github/workflows/devcontainer-ci.yml`) runs both on every push to `main` and every PR.
+CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test and
+the smoke test on every push to `main` and every PR.
+
+`token-file-check-test.sh` tests the token-file mode check in `start.sh` with dummy
+files in temp dirs (including symlinks). It needs no Docker, and CI does not run it.

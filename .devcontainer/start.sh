@@ -56,7 +56,9 @@ checkout_slug="$(printf '%s' "$(basename "$PROJECT_ROOT")" | tr '[:upper:]' '[:l
 checkout_digest="$(printf '%s' "$PROJECT_ROOT" | cksum | cut -d ' ' -f 1)"
 COMPOSE_PROJECT="family-ai-${checkout_slug}-${checkout_digest}"
 SERVICE="app"
-COMPOSE=(docker compose -p "$COMPOSE_PROJECT"
+# --env-file /dev/null: compose reads no .env file. The token comes only from
+# the host file below; ${HOME} in docker-compose.yml comes from the shell.
+COMPOSE=(docker compose -p "$COMPOSE_PROJECT" --env-file /dev/null
     -f "$SCRIPT_DIR/docker-compose.yml"
     -f "$SCRIPT_DIR/compose.ssh.yml")
 if [ "$docker_mode" = true ]; then
@@ -96,9 +98,13 @@ if [ "$(agent_status)" -eq 1 ]; then
 fi
 export HOST_SSH_AUTH_SOCK="$SSH_AUTH_SOCK"
 
-if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
-    echo -e "${YELLOW}Neither GH_TOKEN nor GITHUB_TOKEN is set: gh inside the container will be unauthenticated.${NC}"
-fi
+# ── GitHub token: docker-compose.yml reads it from a file outside the repo ───
+# Only file modes are checked here; the file is never read.
+# shellcheck source=token-file-check.sh
+source "$SCRIPT_DIR/token-file-check.sh"
+check_token_file "$HOME/.config/family-ai/gh.env" | while IFS= read -r line; do
+    echo -e "${YELLOW}${line}${NC}"
+done
 
 if [ "$docker_mode" = true ]; then
     echo -e "${YELLOW}--docker: the container runs privileged. Use it only for sessions that need nested Docker.${NC}"
