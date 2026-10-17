@@ -29,12 +29,13 @@ jobs:
 
       - name: Validate compose files
         run: |
-          docker compose \
+          WORKSPACE_SOURCE="$PWD" docker compose \
             -f .devcontainer/docker-compose.yml \
             config --quiet
 
       - name: Launcher tests
         run: |
+          python3 -I .devcontainer/test-isolation.py
           python3 -I .devcontainer/test-start.py
           python3 -I .devcontainer/test-vscode.py
           python3 -I .devcontainer/test-publishing.py

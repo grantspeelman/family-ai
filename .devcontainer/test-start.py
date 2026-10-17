@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import unittest
 
@@ -13,6 +14,10 @@ class StartTests(unittest.TestCase):
     def run_start(self, *args, with_agent=True):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            controls = root / "controls/.devcontainer"
+            shutil.copytree(START.parent, controls, ignore=shutil.ignore_patterns("__pycache__"))
+            (root / "work/.git").mkdir(parents=True)
+            (root / "controls/session.json").write_text(json.dumps({"version": 1, "source": str(root / "work")}))
             docker = root / "docker"
             docker.write_text(
                 "#!/usr/bin/env python3\n"
@@ -32,7 +37,7 @@ class StartTests(unittest.TestCase):
             env.pop("HERDR_AGENT", None)
             if not with_agent:
                 env.pop("SSH_AUTH_SOCK", None)
-            result = subprocess.run(["bash", str(START), *args], env=env,
+            result = subprocess.run(["bash", str(controls / "start.sh"), *args], env=env,
                                     capture_output=True, text=True)
             self.assertFalse((root / "ssh-commands").exists(), "launcher invoked an SSH tool")
             calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
@@ -45,6 +50,13 @@ class StartTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn("unexpected SSH invocation", result.stderr)
                 self.assertFalse(any("compose.ssh.yml" in arg for call in calls for arg in call[1]))
+
+    def test_stop_preserves_source_and_volumes(self):
+        result, calls = self.run_start("--stop")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1][-1], "down")
+        self.assertNotIn("--volumes", calls[0][1])
 
     def test_default_shell(self):
         result, calls = self.run_start()

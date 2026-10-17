@@ -5,6 +5,8 @@ refuse() {
     echo 'Use .devcontainer/start-vscode.sh from the trusted host; ordinary Reopen in Container is disabled.' >&2
     exit 1
 }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ "${WORKSPACE_SOURCE:-}" = "$(python3 -I "$SCRIPT_DIR/host-session.py" path)" ] || refuse
 [ -f "${HOME:-}/.family-ai-clean-editor" ] || refuse
 [ "${GIT_CONFIG_GLOBAL:-}" = /dev/null ] || refuse
 [ "${GIT_CONFIG_NOSYSTEM:-}" = 1 ] || refuse

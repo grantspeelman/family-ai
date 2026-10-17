@@ -1,6 +1,6 @@
 # 05 — Separate source from trusted host controls
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -34,19 +34,33 @@ must not silently execute agent-modified configuration.
 
 ## Acceptance checklist
 
-- [ ] Agent edits to launcher and Compose files in the disposable copy do not
+- [x] Agent edits to launcher and Compose files in the disposable copy do not
   affect the trusted host launcher or effective isolation policy on restart.
-- [ ] Safe fixture tests show agent writes cannot alter trusted host files or
+- [x] Safe fixture tests show agent writes cannot alter trusted host files or
   Git hooks/configuration, including through worktree metadata paths.
-- [ ] Agents can edit, test, inspect diffs, and make local commits in their copy.
-- [ ] A reviewed change can be transferred to a trusted fixture checkout without
+- [x] Agents can edit, test, inspect diffs, and make local commits in their copy.
+- [x] A reviewed change can be transferred to a trusted fixture checkout without
   importing or executing agent-controlled hooks, Git configuration, or host scripts.
 - [ ] Terminal and VS Code open the intended disposable copy and maintain the
   same boundary; lifecycle operations use trusted controls.
-- [ ] Cleanup/reset behavior is documented and tested without deleting unreviewed
+- [x] Cleanup/reset behavior is documented and tested without deleting unreviewed
   work or unrelated checkouts.
 
 ## Review depth
 
 **Close read.** Review mounts, Git metadata, change transfer, and every host-side
 operation that consumes agent-writable files.
+
+## Validation evidence
+
+- `python3 -I .devcontainer/test-isolation.py` exercises independent Git state,
+  local commits, reviewed data-only transfer, hostile hooks/configuration,
+  worktree pointers, symlink rejection, directory replacement and existing-session
+  preservation using disposable fixtures.
+- `test-start.py` and `test-vscode.py` exercise installed entry points with stubbed
+  Docker/editor commands. `test-runtime-config.py` checks effective Compose mounts
+  and policy for terminal, editor and smoke-test configurations.
+- Terminal and editor configuration open the same disposable source boundary,
+  with build/lifecycle controls read from the separately installed snapshot.
+  A real Docker launch and graphical editor acceptance run remain required;
+  fixture tests do not establish host filesystem access controls or editor runtime behavior.

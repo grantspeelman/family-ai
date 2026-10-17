@@ -36,7 +36,7 @@ class RuntimeConfigTests(unittest.TestCase):
             "smoke": ["docker-compose.yml", "smoke-test.compose.yml"],
         }
         env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
-        env.update(GH_TOKEN="dummy-host-gh-token", GITHUB_TOKEN="dummy-host-github-token",
+        env.update(WORKSPACE_SOURCE=str(ROOT.parent), GH_TOKEN="dummy-host-gh-token", GITHUB_TOKEN="dummy-host-github-token",
                    SSH_AUTH_SOCK="/tmp/test-ssh-agent.sock",
                    SMOKE_CLAUDE_VOLUME="test-claude", SMOKE_CODEX_VOLUME="test-codex")
         for name, compose_files in profiles.items():
@@ -75,9 +75,10 @@ class RuntimeConfigTests(unittest.TestCase):
                 environment = app.get("environment", {})
                 self.assertNotIn("DOCKER_HOST", environment)
                 self.assertNotIn("ENABLE_DOCKER", environment)
-                allowed = {"/workspace", "/home/vscode/.claude", "/home/vscode/.codex", "/run/egress"}
+                allowed = {"/workspace", "/home/vscode/.claude", "/home/vscode/.codex", "/run/egress", "/opt/family-ai-controls"}
                 for key in ("GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "HOST_SSH_AUTH_SOCK"):
                     self.assertNotIn(key, environment)
+                self.assertTrue(next(mount for mount in app["volumes"] if mount["target"] == "/opt/family-ai-controls")["read_only"])
                 self.assertEqual({mount["target"] for mount in app.get("volumes", [])}, allowed)
 
 

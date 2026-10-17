@@ -9,7 +9,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT="family-ai-smoke-$$"
-BASE=(docker compose -p "$PROJECT"
+export WORKSPACE_SOURCE="$(cd "$SCRIPT_DIR/.." && pwd)"
+BASE=(docker compose --env-file /dev/null -p "$PROJECT"
     -f "$SCRIPT_DIR/docker-compose.yml"
     -f "$SCRIPT_DIR/smoke-test.compose.yml")
 in_container() { "${BASE[@]}" exec -T --user vscode app bash -c "$1"; }
@@ -49,6 +50,7 @@ docker inspect "$container_id" | jq -e '
     and (.HostConfig.NetworkMode == "none")
     and (.HostConfig.PidMode != "host")
     and all(.Mounts[]; .Destination == "/workspace"
+        or (.Destination == "/opt/family-ai-controls" and .RW == false)
         or .Destination == "/home/vscode/.claude"
         or .Destination == "/home/vscode/.codex"
         or (.Destination == "/run/egress" and .RW == false))' >/dev/null \
@@ -75,7 +77,7 @@ in_container 'test ! -S /var/run/docker.sock && test ! -S /run/containerd/contai
     || fail "Docker runtime socket present"
 pass "no Docker binaries or runtime sockets"
 
-in_container '.devcontainer/postStartCommand.sh' >/dev/null
+in_container '/opt/family-ai-controls/postStartCommand.sh' >/dev/null
 pass "postStartCommand.sh ran"
 
 [ "$(in_container 'id -u')" = "$USER_UID" ] || fail "vscode UID does not match host UID $USER_UID"
