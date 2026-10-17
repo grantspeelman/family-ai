@@ -1,11 +1,14 @@
 # Allow only reviewed image inputs. Source, Git metadata and local secrets stay out.
 **
+# Re-exclude descendants after opening each parent directory for traversal.
 !.devcontainer/
+.devcontainer/**
 !.devcontainer/Dockerfile
 !.devcontainer/runtime-setuid-probe.c
 !.devcontainer/entrypoint.sh
 !.devcontainer/ssh_known_hosts
 !.devcontainer/egress/
+.devcontainer/egress/**
 !.devcontainer/egress/Dockerfile
 !.devcontainer/egress/proxy.py
 !.devcontainer/egress/allowed-hosts.txt

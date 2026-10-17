@@ -16,7 +16,9 @@ for installed in (False, True):
         if not installed:
             shutil.copyfile(ROOT.parent / '.dockerignore', context / '.dockerignore')
         for name in ('.env', '.env.local', '.git/config', 'secrets/key.pem',
-                     '.devcontainer/.env', '.devcontainer/secret.key', 'unrelated.txt'):
+                     '.devcontainer/.env', '.devcontainer/secret.key',
+                     '.devcontainer/egress/.env', '.devcontainer/egress/secret.key',
+                     '.devcontainer/egress/nested/private.key', 'unrelated.txt'):
             path = context / name
             path.parent.mkdir(exist_ok=True, parents=True)
             path.write_text('dummy-marker-never-copy')
