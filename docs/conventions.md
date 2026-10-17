@@ -17,6 +17,7 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | CI (`workflows` job: `actionlint` and `.github/scripts/check-workflow-rules.py`) | Workflow in place (plan 08). Checks syntax, untrusted input in `run:`, SHA pins, `persist-credentials`, `secrets.`, `pull_request_target` / `workflow_run` and read-only top-level permissions. Judgement rules (per-job write permissions, a reason for each) are for the reviewer. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Dependabot version updates | `.github/dependabot.yml` | Config in place (plan 10) for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
+| CodeQL analysis | GitHub code scanning, default setup (a repo setting, no workflow file) | On (plan 11), analysing `actions` and `python` on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:`. Owner's setting: [docs/github-settings.md](github-settings.md#code-scanning-codeql) |
 | Dependency license check, registry app | CI | PR 2, not yet |
 | Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
 
@@ -77,6 +78,21 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 
   When bumping one by hand, take the new SHA-256 from the project's published checksums (workflow safety rule 6). There is no automation for this yet.
 - A base image bump can propose a tag the container does not suit (for example a non-LTS Ubuntu). A base-image bump is proposed by Dependabot but judged by a human: review it, and close it if it is not wanted. If the same unwanted tag would be proposed every week, add an `ignore` entry for it to the `docker` entry in `dependabot.yml`, with a comment giving the reason.
+
+## CodeQL
+
+CodeQL runs through GitHub's **default setup**, a repo setting, not a workflow in `.github/workflows/`. GitHub's [setup types page](https://docs.github.com/en/code-security/concepts/code-scanning/setup-types) (checked 2026-10-17) says it scans:
+
+- on each push to the default branch or any protected branch;
+- on pull requests against the default branch, except pull requests from forks;
+- weekly, as long as a push or pull request has triggered a scan in the last 180 days.
+
+It picks its own languages. On `main` today it runs `Analyze (actions)` for the workflows and `Analyze (python)` for `.github/scripts/check-workflow-rules.py`. GitHub's permissions and action versions apply, not ours, so the [workflow safety](#workflow-safety) rules do not cover it.
+
+- **Not a gate yet.** CodeQL is not a required check and is not in the `ci` job's `needs:`. Decide that once there is real code and a sense of its noise.
+- **When to switch to a workflow (advanced setup).** Switch when we need something default setup cannot give: custom queries, a real build for a compiled language, or a CodeQL check we control and can make required. That PR adds the workflow under the workflow safety rules and switches default setup off first, because GitHub rejects advanced-setup uploads while default setup is on.
+
+**New language rule.** GitHub says default setup adds a new CodeQL-supported language automatically once its code is in the repo (Rust is supported). A PR that introduces a language (Rust with PR 1 or PR 6, the registry app's language with PR 2, and so on) still checks this. After it merges, `main` should show a new `Analyze (<language>)` check, and the language should be listed under **CodeQL analysis**, then **View CodeQL configuration**, in the repo settings. If it is missing, the owner adds it under **Edit**, then **Languages**. Reviewers check the PR says this was confirmed.
 
 ## Working principles
 

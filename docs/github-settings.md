@@ -1,6 +1,6 @@
 # GitHub settings checklist
 
-Settings that live in GitHub, not in the repo, so a PR cannot apply them. The repo owner applies them by hand. This page is the exact list for the CI gate, fork PR approval, secret scanning and Dependabot; other plans add their own sections.
+Settings that live in GitHub, not in the repo, so a PR cannot apply them. The repo owner applies them by hand. This page is the exact list for the CI gate, fork PR approval, secret scanning, Dependabot and CodeQL; other plans add their own sections.
 
 ## Require the CI gate before merging to `main`
 
@@ -104,6 +104,31 @@ Record it:
 | Dependabot alerts | | |
 | Dependabot security updates | | |
 | `dependabot.yml` parsed with no error | | |
+
+## Code scanning (CodeQL)
+
+Owner action. CodeQL uses GitHub's **default setup**, so there is no workflow file and the setting itself is the configuration ([docs/conventions.md](conventions.md#codeql)).
+
+Availability, checked 2026-10-14 against GitHub's docs:
+
+- [Configuring advanced setup for code scanning](https://docs.github.com/en/code-security/how-tos/scan-code-for-vulnerabilities/configure-code-scanning/configuring-advanced-setup-for-code-scanning) lists the eligibility requirement "It is publicly visible, or GitHub Code Security is enabled", and says "You can configure code scanning for any public repository where you have write access." So public repos need no paid licence.
+- [About code scanning](https://docs.github.com/en/code-security/code-scanning/introduction-to-code-scanning/about-code-scanning) says a GitHub Code Security licence is needed "on private repositories" and that runs consume GitHub Actions minutes; standard GitHub-hosted runners are free for public repositories ([About billing for GitHub Actions](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)).
+- None of these pages says "free" in so many words for public repos; the eligibility wording above is the evidence. If any button shows a price or a billing prompt, stop and check the docs again.
+
+Steps (menu names from [GitHub's default setup docs](https://docs.github.com/en/code-security/code-scanning/enabling-code-scanning/configuring-default-setup-for-code-scanning), checked 2026-10-17):
+
+1. Repository main page, then **Settings**, then **Advanced Security** in the **Security and quality** section.
+2. On the **CodeQL analysis** row, choose **Set up**, then **Default**, then **Enable CodeQL**. If no **Set up** button shows, default setup is already on.
+3. To see what it analyses, open the row's menu and choose **View CodeQL configuration**. Languages are changed under **Edit**.
+
+Then confirm the `Analyze (...)` checks pass on `main` and appear on PRs. Do not make them required checks (they are not part of the `ci` gate yet).
+
+Record it:
+
+| Setting | Turned on by | Date |
+| --- | --- | --- |
+| CodeQL default setup on | | |
+| `Analyze (actions)` and `Analyze (python)` passing on `main` | | |
 
 ## Record in the PR
 
