@@ -32,7 +32,7 @@ One plan per PR. Each plan is a single idea that lands as its own PR, and each b
 | 04 | [Agent harness](04-agent-harness.md) | Close read |
 | 05 | [Conventions and working principles](05-conventions.md) | Close read |
 | 06 | [Changed-files pre-commit checks](06-changed-files-checks.md) | Close read |
-| 07 | [CI full-suite gate](07-ci-gate.md) | Close read |
+| 07 | [CI gate](07-ci-gate.md) | Close read |
 | 08 | [Workflow safety](08-workflow-safety.md) | Close read |
 | 09 | [GitHub secret scanning and push protection](09-github-secret-scanning.md) | Skim |
 | 10 | [Dependabot](10-dependabot.md) | Skim |

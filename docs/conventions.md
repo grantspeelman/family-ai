@@ -14,16 +14,16 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
-| Merge gate: one required `ci` check over all CI jobs | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It runs the container checks, the full-history secret scan and the hook over the whole tree. The hook's gitleaks step scans nothing there (it only looks at staged files, and none are staged), so the full-history scan is the secret check. Lint, tests, duplication, complexity and license checks are not wired yet (PRs 2 and 7). Requiring it in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | CI (`workflows` job: `actionlint` and `.github/scripts/check-workflow-rules.py`) | Workflow in place (plan 08). Checks syntax, untrusted input in `run:`, SHA pins, `persist-credentials`, `secrets.`, `pull_request_target` / `workflow_run` and read-only top-level permissions. Judgement rules (per-job write permissions, a reason for each) are for the reviewer. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Dependabot version updates | `.github/dependabot.yml` | Config in place (plan 10) for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
-| CodeQL analysis (GitHub Actions workflows) | `.github/workflows/codeql.yml` | Workflow in place (plan 11), analysing the `actions` language on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:` yet. Results in the code scanning tab need the owner's settings: [docs/github-settings.md](github-settings.md) |
+| CodeQL analysis | GitHub code scanning, default setup (a repo setting, no workflow file) | On (plan 11), analysing `actions` and `python` on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:`. Owner's setting: [docs/github-settings.md](github-settings.md#code-scanning-codeql) |
 | Dependency license check, registry app | CI | PR 2, not yet |
 | Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
 
 ## Pre-commit hook: what passing means, and adding a language
 
-The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: today it runs the container checks and the full-history secret scan, and it will run the full suite (lint, tests, duplication, complexity, licenses) once PRs 2 and 7 land.
+The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint and the full-history secret scan.
 
 **Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that lint, tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders.
 
@@ -81,14 +81,18 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 
 ## CodeQL
 
-`.github/workflows/codeql.yml` runs CodeQL on pull requests to `main`, on pushes to `main`, and weekly (Wednesdays, 03:17 UTC). It analyses what exists today: the workflows in `.github/workflows/`, CodeQL language `actions` (checked against GitHub's [advanced setup docs](https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/customizing-your-advanced-setup-for-code-scanning) on 2026-10-14).
+CodeQL runs through GitHub's **default setup**, a repo setting, not a workflow in `.github/workflows/`. GitHub's [setup types page](https://docs.github.com/en/code-security/concepts/code-scanning/setup-types) (checked 2026-10-17) says it scans:
 
-- **Permissions.** Top-level `contents: read` like every workflow. The one `analyze` job adds `security-events: write`, which CodeQL needs to upload results, with the reason in a comment. `contents: read` is restated on the job because job-level permissions replace the top-level block. GitHub's template also lists `actions: read` and `packages: read`; the first is for private repos and the second for private CodeQL packs, and neither applies here.
-- **Schedule trigger.** `schedule` is the one trigger here beyond `push` and `pull_request`. It is allowed: it runs only the workflow file on the default branch, never fork code, and the check script does not restrict it. GitHub disables scheduled workflows in a public repo after 60 days without repo activity, so a quiet repo can stop getting the weekly run until someone re-enables it.
+- on each push to the default branch or any protected branch;
+- on pull requests against the default branch, except pull requests from forks;
+- weekly, as long as a push or pull request has triggered a scan in the last 180 days.
+
+It picks its own languages. On `main` today it runs `Analyze (actions)` for the workflows and `Analyze (python)` for `.github/scripts/check-workflow-rules.py`. GitHub's permissions and action versions apply, not ours, so the [workflow safety](#workflow-safety) rules do not cover it.
+
 - **Not a gate yet.** CodeQL is not a required check and is not in the `ci` job's `needs:`. Decide that once there is real code and a sense of its noise.
-- **Dependabot** already covers the new action pins: the `github-actions` entry at `/` reads `github/codeql-action/init` and `analyze` like any other `uses:` line.
+- **When to switch to a workflow (advanced setup).** Switch when we need something default setup cannot give: custom queries, a real build for a compiled language, or a CodeQL check we control and can make required. That PR adds the workflow under the workflow safety rules and switches default setup off first, because GitHub rejects advanced-setup uploads while default setup is on.
 
-**New language rule.** A PR that introduces a language (Rust with PR 1 or PR 6, the registry app's language with PR 2, and so on) adds it to the `matrix` in `codeql.yml` in the same PR, using CodeQL's language identifier from the docs above (for example `rust`) and the `build-mode` that language needs. Otherwise the new code is never analysed. Reviewers check for it. Do not add a language before its code exists.
+**New language rule.** GitHub says default setup adds a new CodeQL-supported language automatically once its code is in the repo (Rust is supported). A PR that introduces a language (Rust with PR 1 or PR 6, the registry app's language with PR 2, and so on) still checks this. After it merges, `main` should show a new `Analyze (<language>)` check, and the language should be listed under **CodeQL analysis**, then **View CodeQL configuration**, in the repo settings. If it is missing, the owner adds it under **Edit**, then **Languages**. Reviewers check the PR says this was confirmed.
 
 ## What goes in the repo
 
@@ -106,8 +110,9 @@ These apply to every PR, not just the foundation ones.
 
 1. **Start from a written spec.** Each PR starts from its plan (a short spec and checklist). The agent restates the goal, scope and checklist and confirms it understands before touching code.
 2. **Decide review depth per PR, and size the PR by it.** Each plan says whether it needs a close read or a skim (see sizing below).
-3. **The agent runs the tests itself and shows them passing** before marking a PR done. The pre-commit hook backs this up on changed files; it does not replace running the tests, and CI is the real gate (it will run the full suite once PRs 2 and 7 land; today it runs the container checks and the full-history secret scan).
-4. **Keep PRs small enough for a quick loop.** Rust compile times are slow, so large PRs make the test-fix-retest loop painful for the agent.
+3. **The agent runs the tests itself and shows them passing** before marking a PR done. The pre-commit hook backs this up on changed files; it does not replace running the tests, and CI is the real gate.
+4. **A PR that adds a test or lint job adds it to `ci`'s `needs:` in the same PR.** Otherwise the job runs but does not gate merging.
+5. **Keep PRs small enough for a quick loop.** Rust compile times are slow, so large PRs make the test-fix-retest loop painful for the agent.
 
 ## Sizing rule
 
@@ -155,5 +160,5 @@ Open items:
 - **PR description.** Say what the PR does, link its plan, state the checklist status (each item ticked, or unticked with the reason), and state the review depth that applies (close read or skim).
 - **Plan status.** Set the plan's `Status` to `in progress` while the PR is open, and to `merged` with the PR link at the end (see `AGENTS.md`).
 - **Never bypass the hook** with `--no-verify`.
-- **Public text stays clean.** Commit messages, PR text and docs are public. Follow the rule in `CLAUDE.md` about security concerns.
+- **Public text stays clean.** Commit messages, PR text and docs are public. Follow the public-repo rule in `AGENTS.md` about security concerns.
 - **Pricing and positioning stay out of the repo.** See [What goes in the repo](#what-goes-in-the-repo).
