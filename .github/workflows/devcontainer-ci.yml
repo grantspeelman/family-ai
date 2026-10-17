@@ -36,6 +36,7 @@ jobs:
       - name: Launcher tests
         run: |
           python3 -I .devcontainer/test-isolation.py
+          python3 -I .devcontainer/test-agent-state.py
           python3 -I .devcontainer/test-start.py
           python3 -I .devcontainer/test-vscode.py
           python3 -I .devcontainer/test-publishing.py
@@ -43,6 +44,9 @@ jobs:
 
       - name: Entry-point configuration checks
         run: python3 -I .devcontainer/test-runtime-config.py
+
+      - name: Build context fixture
+        run: python3 -I .devcontainer/test-build-context.py
 
       - name: Build image
         run: docker build -f .devcontainer/Dockerfile -t "$IMAGE" .

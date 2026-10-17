@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import unittest
+import tempfile
 
 ROOT = Path(__file__).resolve().parent
 
@@ -25,20 +26,46 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertTrue(dockerfile.rstrip().endswith("FROM development AS final"))
         self.assertNotIn("docker cp", (ROOT / "smoke-test.sh").read_text())
 
+    def test_dynamic_smoke_profiles_keep_test_stage_and_selected_state(self):
+        # Execute the same generator embedded in the smoke launcher, rather than
+        # reconstructing an override that could drift from the actual entry point.
+        generator = (ROOT / 'smoke-test.sh').read_text().split("<<'PROFILE'\n", 1)[1].split('\nPROFILE', 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for agent in ('claude', 'codex', 'none'):
+                subprocess.run(['python3', '-I', '-', str(root), agent],
+                               input=generator, text=True, check=True)
+                result = subprocess.run(['docker', 'compose', '--env-file', '/dev/null',
+                                         '-f', str(ROOT / 'docker-compose.yml'),
+                                         '-f', str(root / 'agent-state.compose.json'),
+                                         'config', '--format', 'json'],
+                                        env=dict(os.environ, WORKSPACE_SOURCE=str(root / 'work')),
+                                        capture_output=True, text=True, check=True)
+                app = json.loads(result.stdout)['services']['app']
+                self.assertEqual(app['build']['target'], 'smoke')
+                self.assertEqual(app['environment']['FAMILY_AI_AGENT'], agent)
+                state = [mount for mount in app['volumes']
+                         if mount['target'].startswith('/home/vscode/.')]
+                self.assertEqual(len(state), 0 if agent == 'none' else 1)
+                if state:
+                    self.assertEqual(state[0]['source'], str(root / agent))
+                    self.assertEqual(state[0]['target'], '/home/vscode/.' + agent)
+                self.assertEqual(app['user'], 'vscode')
+                self.assertEqual(app['cap_drop'], ['ALL'])
+                self.assertEqual(app['network_mode'], 'none')
+
     def test_entry_points_have_no_docker_authority(self):
         vscode = json.loads((ROOT / "devcontainer.json").read_text())
-        files = vscode["dockerComposeFile"]
+        files = [file for file in vscode["dockerComposeFile"] if file != "agent-state.compose.json"]
         if isinstance(files, str):
             files = [files]
         profiles = {
             "vscode": files,
             "terminal": ["docker-compose.yml"],
-            "smoke": ["docker-compose.yml", "smoke-test.compose.yml"],
         }
         env = {key: os.environ[key] for key in ("PATH", "HOME") if key in os.environ}
         env.update(WORKSPACE_SOURCE=str(ROOT.parent), GH_TOKEN="dummy-host-gh-token", GITHUB_TOKEN="dummy-host-github-token",
-                   SSH_AUTH_SOCK="/tmp/test-ssh-agent.sock",
-                   SMOKE_CLAUDE_VOLUME="test-claude", SMOKE_CODEX_VOLUME="test-codex")
+                   SSH_AUTH_SOCK="/tmp/test-ssh-agent.sock")
         for name, compose_files in profiles.items():
             with self.subTest(entry_point=name):
                 command = ["docker", "compose", "--env-file", "/dev/null"]
@@ -49,10 +76,7 @@ class RuntimeConfigTests(unittest.TestCase):
                 services = json.loads(result.stdout)["services"]
                 app = services["app"]
                 gateway = services["egress"]
-                if name == "smoke":
-                    self.assertEqual(app["build"]["target"], "smoke")
-                else:
-                    self.assertNotIn("target", app["build"])
+                self.assertNotIn("target", app["build"])
                 self.assertTrue(gateway["read_only"])
                 self.assertIn("ALL", gateway["cap_drop"])
                 self.assertEqual(app["depends_on"]["egress"]["condition"], "service_healthy")
@@ -75,7 +99,7 @@ class RuntimeConfigTests(unittest.TestCase):
                 environment = app.get("environment", {})
                 self.assertNotIn("DOCKER_HOST", environment)
                 self.assertNotIn("ENABLE_DOCKER", environment)
-                allowed = {"/workspace", "/home/vscode/.claude", "/home/vscode/.codex", "/run/egress", "/opt/family-ai-controls"}
+                allowed = {"/workspace", "/run/egress", "/opt/family-ai-controls"}
                 for key in ("GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "HOST_SSH_AUTH_SOCK"):
                     self.assertNotIn(key, environment)
                 self.assertTrue(next(mount for mount in app["volumes"] if mount["target"] == "/opt/family-ai-controls")["read_only"])

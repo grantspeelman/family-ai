@@ -3,6 +3,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+selected_agent=none
+case "${1:-}" in
+    --claude|--codex) selected_agent="${1#--}"; shift ;;
+esac
 # Do not let editor flags redirect this session to an existing user profile.
 for arg in "$@"; do
     case "$arg" in
@@ -12,6 +16,7 @@ for arg in "$@"; do
 done
 WORKSPACE_SOURCE="$(python3 -I "$SCRIPT_DIR/host-session.py" path)"
 export WORKSPACE_SOURCE
+python3 -I "$SCRIPT_DIR/agent-state.py" select "$selected_agent"
 editor="$(command -v code)"
 profile_root="$(mktemp -d "${TMPDIR:-/tmp}/family-ai-vscode.XXXXXXXX")"
 # --wait keeps the profile alive until the editor workspace has closed.

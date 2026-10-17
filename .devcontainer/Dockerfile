@@ -148,10 +148,8 @@ RUN set -eux; \
     usermod -L vscode; \
     rm -f /etc/sudoers.d/*
 
-# Claude's config dir is a named volume (see docker-compose.yml) so the login
-# survives rebuilds. Creating it here, vscode-owned, means Docker seeds a fresh
-# volume with that ownership instead of root's.
-# Codex's config dir (CODEX_HOME) is a volume for the same reason.
+# Only the selected provider directory is persisted by installed host controls.
+# Unselected directories belong to the disposable container filesystem.
 ENV CLAUDE_CONFIG_DIR=/home/vscode/.claude
 ENV CODEX_HOME=/home/vscode/.codex
 RUN mkdir -p /workspace "${CLAUDE_CONFIG_DIR}" "${CODEX_HOME}" && \

@@ -84,6 +84,14 @@ class StartTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(calls[-1][0], args[-1].removeprefix("--") if len(args) == 1 else "codex")
 
+    def test_explicit_shell_state(self):
+        result, calls = self.run_start('--state', 'codex', '--', 'bash')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[-1][1][-1], 'bash')
+        result, calls = self.run_start('--state', 'claude', '--codex')
+        self.assertEqual(result.returncode, 64)
+        self.assertEqual(calls, [])
+
     def test_removed_docker_mode_fails_before_docker(self):
         for args in [("--docker",), ("--docker", "--codex"),
                      ("--claude", "--docker"), ("--docker", "--", "bash")]:

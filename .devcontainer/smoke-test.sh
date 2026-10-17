@@ -3,21 +3,21 @@
 # uses: builds for the calling user's UID, runs
 # the post-start setup, then checks normal tooling and runtime isolation.
 # Runs from a Docker-capable CI runner or trusted host, outside agent sessions. It uses
-# its own compose project, throwaway Claude and Codex config volumes (never your real
-# logins'), and removes them all on exit.
+# its own compose project and throwaway selected state directories, never personal
+# login storage, and removes them on exit.
 set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT="family-ai-smoke-$$"
 tmp="$(mktemp -d)"
-# Match installed sessions: editable source must not alias trusted controls.
+# Exercise an installed control snapshot and independent Git clone, just as users do.
 python3 -I "$SCRIPT_DIR/host-session.py" create --source "$(cd "$SCRIPT_DIR/.." && pwd)" \
     --session "$tmp/session"
 SCRIPT_DIR="$tmp/session/controls/.devcontainer"
 export WORKSPACE_SOURCE="$tmp/session/work"
 BASE=(docker compose --env-file /dev/null -p "$PROJECT"
     -f "$SCRIPT_DIR/docker-compose.yml"
-    -f "$SCRIPT_DIR/smoke-test.compose.yml")
+    -f "$tmp/agent-state.compose.json")
 in_container() { "${BASE[@]}" exec -T --user vscode app bash -c "$1"; }
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -30,8 +30,22 @@ cleanup() {
 trap cleanup EXIT
 
 export USER_UID="$(id -u)" USER_GID="$(id -g)"
-export SMOKE_CLAUDE_VOLUME="$PROJECT-claude-config"
-export SMOKE_CODEX_VOLUME="$PROJECT-codex-config"
+# Per-run provider markers; no personal login or legacy volume is touched.
+mkdir -p "$tmp/claude" "$tmp/codex" "$tmp/outside"
+printf dummy-claude > "$tmp/claude/dummy-marker"
+printf dummy-codex > "$tmp/codex/dummy-marker"
+printf dummy-secret > "$tmp/outside/.env"
+select_profile() {
+    python3 -I - "$tmp" "$1" <<'PROFILE'
+import json, pathlib, sys
+root, agent = pathlib.Path(sys.argv[1]), sys.argv[2]
+mounts = [] if agent == 'none' else [{'type': 'bind', 'source': str(root / agent),
+                                     'target': '/home/vscode/.' + agent}]
+(root / 'agent-state.compose.json').write_text(json.dumps({'services': {'app': {
+    'environment': {'FAMILY_AI_AGENT': agent}, 'volumes': mounts, 'build': {'target': 'smoke'}}}}))
+PROFILE
+}
+select_profile claude
 
 # Dummy host values prove Compose does not transport publishing credentials.
 export GH_TOKEN=dummy-host-gh-token GITHUB_TOKEN=dummy-host-github-token
@@ -56,11 +70,10 @@ docker inspect "$container_id" | jq -e '
     and all(.Mounts[]; .Destination == "/workspace"
         or (.Destination == "/opt/family-ai-controls" and .RW == false)
         or .Destination == "/home/vscode/.claude"
-        or .Destination == "/home/vscode/.codex"
         or (.Destination == "/run/egress" and .RW == false))' >/dev/null \
     || fail "unexpected agent runtime privileges or mounts"
 pass "agent runtime privileges and mounts checked"
-# The smoke-only image stage builds the harmless root-owned setuid fixture.
+# The smoke-only image stage supplies a harmless root-owned setuid EUID probe.
 # Runtime capabilities and identity remain identical to the development image.
 # No --user override: verify the default terminal/IDE container execution user.
 "${BASE[@]}" exec -T app python3 -I /workspace/.devcontainer/test-privileges.py \
@@ -83,6 +96,7 @@ pass "no Docker binaries or runtime sockets"
 
 in_container '/opt/family-ai-controls/postStartCommand.sh' >/dev/null
 pass "postStartCommand.sh ran"
+# Source proposals must not modify the independently installed lifecycle controls.
 controls_hash="$(sha256sum "$SCRIPT_DIR/postStartCommand.sh" | cut -d ' ' -f 1)"
 in_container 'printf "\n# dummy-source-proposal\n" >> /workspace/.devcontainer/postStartCommand.sh &&
     test ! -w /opt/family-ai-controls/postStartCommand.sh' \
@@ -90,6 +104,7 @@ in_container 'printf "\n# dummy-source-proposal\n" >> /workspace/.devcontainer/p
 [ "$(sha256sum "$SCRIPT_DIR/postStartCommand.sh" | cut -d ' ' -f 1)" = "$controls_hash" ] \
     || fail "source proposal changed installed controls"
 pass "source proposals cannot alter installed lifecycle controls"
+
 
 [ "$(in_container 'id -u')" = "$USER_UID" ] || fail "vscode UID does not match host UID $USER_UID"
 pass "vscode runs as host UID $USER_UID"
@@ -136,6 +151,34 @@ in_container '
     set -e; cd /tmp/t; git rm -qf --cached leak.txt; rm leak.txt
     echo clean > ok.txt; git add ok.txt; git commit -qm clean >/dev/null 2>&1' || fail "clean change was not committed"
 pass "clean change commits normally"
+
+# Recreate the same app with each selection, proving previous login markers do
+# not leak through a retained container layer or a second mounted provider home.
+for selected in codex none claude; do
+    select_profile "$selected"
+    "${BASE[@]}" up --detach --no-deps --force-recreate app >/dev/null
+    "${BASE[@]}" exec -T --user vscode app /opt/family-ai-controls/postStartCommand.sh >/dev/null
+    "${BASE[@]}" exec -T app python3 -I - "$selected" <<'STATE'
+import json, pathlib, subprocess, sys
+agent = sys.argv[1]
+for name in ('claude', 'codex'):
+    marker = pathlib.Path('/home/vscode/.' + name + '/dummy-marker')
+    assert marker.exists() == (name == agent), (agent, name)
+    if marker.exists():
+        assert marker.read_text() == 'dummy-' + name
+assert not pathlib.Path('/workspace/.env').exists()
+subprocess.run(['cargo', 'new', '--quiet', '--vcs', 'none', '/tmp/state-crate'], check=True)
+subprocess.run(['cargo', 'test', '--quiet', '--manifest-path', '/tmp/state-crate/Cargo.toml'], check=True)
+for command in ('claude', 'codex'):
+    subprocess.run([command, '--version'], check=True)
+STATE
+    id="$("${BASE[@]}" ps -q app)"
+    docker inspect "$id" | jq -e --arg selected "$selected" '
+      [.[0].Mounts[] | select(.Destination | startswith("/home/vscode/.")) | .Destination]
+      == (if $selected == "none" then [] else ["/home/vscode/." + $selected] end)' >/dev/null \
+      || fail "unexpected provider mounts for $selected"
+done
+pass "selected provider and shell mounts, dummy markers, lifecycle and CLI tools checked"
 
 # Losing the gateway cannot reopen direct egress. New sessions fail closed.
 "${BASE[@]}" stop egress >/dev/null
