@@ -16,12 +16,19 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 rebuild=false
 stop=false
 agent=""
+state_agent=""
 command=(bash)
 while [ "$#" -gt 0 ]; do
     arg="$1"
     case "$arg" in
         --rebuild) rebuild=true ;;
         --stop) stop=true ;;
+        --state)
+            shift
+            case "${1:-}" in
+                claude|codex|none) state_agent="$1" ;;
+                *) echo '--state needs claude, codex or none.' >&2; exit 64 ;;
+            esac ;;
         --docker)
             echo "--docker is no longer supported. Run Docker checks in CI; see .devcontainer/README.md (Docker checks)." >&2
             exit 64 ;;
@@ -50,8 +57,16 @@ case "${command[0]}" in
     claude|codex) agent="${command[0]}" ;;
 esac
 
+if [ -n "$state_agent" ] && [ -n "$agent" ] && [ "$state_agent" != "$agent" ]; then
+    echo '--state must match the directly selected agent.' >&2; exit 64
+fi
+state_agent="${state_agent:-${agent:-none}}"
+
 WORKSPACE_SOURCE="$(python3 -I "$SCRIPT_DIR/host-session.py" path)"
 export WORKSPACE_SOURCE
+if [ "$stop" != true ]; then
+    python3 -I "$SCRIPT_DIR/agent-state.py" select "$state_agent"
+fi
 
 # One container per checkout: key the compose project to the checkout path, so
 # two checkouts never share (or recreate) each other's container. The name also
@@ -62,6 +77,9 @@ COMPOSE_PROJECT="family-ai-${checkout_slug}-${checkout_digest}"
 SERVICE="app"
 COMPOSE=(docker compose --env-file /dev/null -p "$COMPOSE_PROJECT"
     -f "$SCRIPT_DIR/docker-compose.yml")
+if [ -f "$SCRIPT_DIR/agent-state.compose.json" ]; then
+    COMPOSE+=(-f "$SCRIPT_DIR/agent-state.compose.json")
+fi
 
 USER_UID="$(id -u)"
 USER_GID="$(id -g)"

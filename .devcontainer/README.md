@@ -27,7 +27,8 @@ installed control path for subsequent launches, rebuilds and stops.
 
 | Flag        | Effect |
 |-------------|--------|
-| `--stop` | Stop the terminal container while retaining all source and config volumes. |
+| `--stop` | Stop the terminal container while retaining source and selected provider state. |
+| `--state claude`, `--state codex`, `--state none` | Select persisted state explicitly for a shell or arbitrary command. Direct agent commands select their own state automatically. |
 | `--rebuild` | Rebuild the image from scratch. This is also how Claude Code and Codex get upgraded. |
 | `--claude`  | Run Claude Code directly instead of a shell. Sets `HERDR_AGENT` so [herdr](https://herdr.dev) sees the agent. |
 | `--codex`   | Same, for Codex. |
@@ -79,9 +80,94 @@ forwarding sockets or Git credential helper. A graphical end-to-end check is
 still required; the automated tests exercise host launch/preflight behavior and
 Compose configuration.
 
-First time only: run `claude` (or `codex`) inside and log in. The logins live in the
-`family-ai-claude-config` and `family-ai-codex-config` volumes, which every container for this repo
-shares, so it survives rebuilds and covers both entry points.
+## Provider state and authentication
+
+A plain terminal or editor launch selects `none`: no provider state directory is
+mounted. `start.sh --claude`, `start.sh --codex`, and direct commands after `--`
+select the named provider automatically. For a shell that needs one provider's
+login, use `start.sh --state codex -- bash` (or `--state claude`). Wrappers such as
+`bash -lc 'codex'` need that explicit state flag. Conflicting direct-agent and
+state selections are refused.
+
+For the editor use `start-vscode.sh --claude` or `start-vscode.sh --codex` before
+any file paths. Only that provider's extension is added to the remote container;
+a plain editor launch adds neither provider extension. The selected extension
+may need additional approved network endpoints or an offline extension package;
+no gateway policy changes are made automatically. GUI authentication remains a
+manual acceptance check.
+
+Each installed session owns separate `state/claude` and `state/codex` directories
+next to `controls` and `work`. Only the selected directory is bound into the app.
+The other provider's home is an empty image directory and does not contain its
+persisted state. First run: log in inside the selected session. Stop/start and
+image rebuilds retain that session's login. Different session directories,
+checkouts and trust levels share no provider state. Create a new installed session
+for each trust level; there is no global provider-volume name or automatic import.
+Both entry points intentionally share the selected state within one session.
+
+Switching selection stops and removes that session's existing app containers,
+including editor containers, before changing the trusted Compose override. Close
+the editor and finish work in other terminals before switching. Never run both
+launchers concurrently during selection/reset; coordinate these host operations.
+Source, provider state and the egress volume are retained. Reconnecting with the
+same selection keeps the current container.
+
+The provider process can read its own credentials, as can commands running as the
+same user. Selection limits which provider's storage is exposed; it cannot hide
+that provider's credentials from its own process. State may also include
+executable plugins, hooks, skills, MCP definitions, settings, session histories,
+and caches. An image rebuild does not clean this persisted configuration.
+Keep real `.env` files, publishing credentials, private keys and unrelated secrets
+outside both the trusted checkout and disposable `work`; source installation
+copies committed files only, so do not commit any of those files. The build
+context is separately restricted to explicitly allowed image inputs through
+`.dockerignore` and matching Dockerfile-specific policies. Add a reviewed allowlist
+entry when a new image input is needed; arbitrary source files cannot be copied
+into an image without updating that policy.
+
+### Reset, logout and migration
+
+Run lifecycle operations from the trusted host using installed controls:
+
+```sh
+python3 -I session-01/controls/.devcontainer/agent-state.py reset codex
+python3 -I session-01/controls/.devcontainer/agent-state.py reset claude
+```
+
+Reset first stops/removes all labeled app containers for that source, including
+terminal and IDE projects, and refuses cleanup if any remain. Close the editor
+first so it cannot reconnect while the operation is running. Reset deletes
+settings, hooks, plugins, histories and caches for the named provider, retaining
+only Codex `auth.json` or Claude `.credentials.json` when present. It does not
+preserve arbitrary configuration or credentials supplied through other mechanisms.
+Some versions may require onboarding or login again after configuration reset;
+no selective authentication-only mount is assumed. Provider state files must be
+regular single-link files; symlink login files cause reset to refuse cleanup.
+Reset uses dummy login markers in tests and never reads real logins in CI.
+
+For logout, use the provider's own logout operation in the selected session
+(`codex logout`, or Claude's `/logout` command). To remove all locally stored state
+as well, run the same host reset command with `--including-auth`. Local deletion
+does not revoke copied tokens or provider sessions: use the provider's account
+controls to revoke sessions/keys and rotate affected credentials, then log in
+again. No command here automatically revokes or rotates credentials.
+
+Legacy named volumes `family-ai-claude-config` and `family-ai-codex-config` are
+never mounted, migrated or deleted automatically. The preferred migration is a
+fresh provider login in each new session. If retaining an old login is necessary,
+stop every old container using that volume, use a trusted host backup/export
+procedure, inspect the backup as data, and deliberately copy only the relevant
+login file into the new selected state directory with owner-only permissions.
+Do not execute or copy old hooks/plugins/settings as part of login migration.
+Keep the old volume until login in the new session works; remove that exact old
+volume only when deliberately retiring it. Protect backups like credentials.
+
+Manual acceptance for each provider: create a fresh selected session, log in,
+verify restart and rebuild keep the login, reset disposable settings and check
+whether re-onboarding is required, log out, and verify a subsequent restart asks
+for login. Repeat in the clean editor entry point, checking its effective mounts.
+These authenticated/GUI checks require a user account and are not claimed by the
+secret-free automated smoke fixtures.
 
 ## What the container can reach
 
@@ -90,7 +176,7 @@ shares, so it survives rebuilds and covers both entry points.
 | **Files** | Disposable `work` at `/workspace`; reviewed lifecycle controls read-only at `/opt/family-ai-controls`. Trusted checkout and its Git metadata are not mounted. |
 | **SSH** | No host agent forwarding or host keys. The launcher never starts an agent or loads keys. |
 | **GitHub API** | Public unauthenticated queries only; publishing credentials stay on the host. |
-| **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
+| **Provider state** | Only the selected provider directory; shell defaults to neither. Claude settings are initialized only when Claude is selected. |
 | **Network** | Loopback and approved HTTPS destinations through the separate gateway. |
 
 The application, its relay, terminal shells and editor commands start directly as
@@ -106,14 +192,14 @@ large future builds may need a reviewed adjustment. A host must have enough
 resources available; limits do not reserve memory. Keep the bounds in the shared
 Compose definition so terminal and editor sessions use the same policy.
 
-Fresh named config volumes inherit `vscode` ownership from the built image.
-Existing volumes keep their ownership: changing the host UID does not migrate
-stored data. Startup rejects unwritable workspace/config directories. Recreate
-disposable volumes, or stop the containers and have a trusted host administrator
-repair retained volume ownership to the configured UID/GID. Do not enable runtime
-sudo or run the app as root to repair them. Terminal builds use the calling host
-UID/GID; the isolated editor launcher passes the same build arguments and disables
-Dev Containers' runtime UID rewriting. Start the editor as a non-root host user.
+Selected host state directories are created with owner-only permissions by the
+host launcher. Existing state retains its ownership: changing host UID does not
+migrate it. Startup rejects unwritable workspace/config directories. Stop all
+session containers and have a trusted host administrator repair ownership to the
+configured UID/GID if needed. Do not enable runtime sudo or run the app as root to
+repair them. Terminal builds use the calling host UID/GID; the isolated editor
+launcher passes the same arguments and disables runtime UID rewriting. Start
+the editor as a non-root host user.
 
 ### Host namespace options
 
@@ -190,13 +276,13 @@ Neither contacts GitHub. Provider logins are managed separately.
 
 ## Reset and cleanup
 
-`start.sh --stop` never removes source or config volumes. A fresh session always
-uses a new destination and a new disposable clone. Before retiring an old session,
+`start.sh --stop` never removes source or provider state. A fresh session always
+uses a new destination, new provider state and a new disposable clone. Before retiring an old session,
 stop both entry points, export and review all work you intend to keep, and verify
 it reached the trusted checkout. Only then manually delete that exact old session
-directory from the host. There is no recursive reset/delete command, implicit
-workspace cleanup, or operation that deletes unrelated checkouts. Config-volume
-lifecycle is separate; stopping or deleting the directory does not remove logins.
+directory from the host. There is no implicit workspace cleanup or operation that deletes unrelated
+checkouts. Deleting an installed session directory also deletes its provider
+state; retire it deliberately. Legacy named volumes remain separate.
 
 ## Project toolchain
 
@@ -278,8 +364,9 @@ project toolchain, the commit hook, direct non-root identity, dropped capabiliti
 active seccomp, no-new-privileges and a harmless root-owned setuid probe.
 The probe is baked into a smoke-only build stage; default terminal/editor images
 exclude it, and smoke setup requires no runtime privilege escalation. It runs from a Docker-capable CI runner
-or trusted host, with throwaway Claude and Codex config volumes and dummy host
-token values.
+or trusted host, with throwaway selected provider directories and dummy host
+token values. It recreates the app for Claude, Codex and plain shell profiles and
+checks marker isolation, effective state mounts and normal command execution.
 It does not mount a Docker socket or start a nested daemon.
 
 CI (`.github/workflows/devcontainer-ci.yml`) runs the image and smoke checks on

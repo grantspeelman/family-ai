@@ -18,6 +18,8 @@ services:
       retries: 15
   app:
     user: vscode
+    labels:
+      org.family-ai.session: ${WORKSPACE_SOURCE:?Use an installed trusted host session}
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     # Bound runaway commands while allowing parallel Rust and agent workloads.
@@ -47,16 +49,6 @@ services:
       - egress-socket:/run/egress:ro
       - ${WORKSPACE_SOURCE:?Use an installed trusted host session}:/workspace:cached
       - .:/opt/family-ai-controls:ro
-      - claude-config:/home/vscode/.claude
-      - codex-config:/home/vscode/.codex
 
 volumes:
   egress-socket:
-  # A fixed name, so the Claude login is shared by every container for this
-  # repo — VS Code's and start.sh's, across checkouts and rebuilds.
-  claude-config:
-    name: family-ai-claude-config
-
-  # Same for the Codex login.
-  codex-config:
-    name: family-ai-codex-config

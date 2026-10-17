@@ -1,6 +1,6 @@
 # 06 — Reduce credential exposure and persistence
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -36,18 +36,30 @@ secrets out of runtime mounts and image build contexts.
 
 ## Acceptance checklist
 
-- [ ] Dummy-marker tests show Claude sessions cannot read Codex state and vice
+- [x] Dummy-marker tests show Claude sessions cannot read Codex state and vice
   versa; plain shells expose only explicitly selected state.
-- [ ] Separate checkouts/trust levels do not share writable configuration unless
+- [x] Separate checkouts/trust levels do not share writable configuration unless
   deliberately configured and documented.
-- [ ] A reset removes disposable agent-controlled configuration, with the
+- [x] A reset removes disposable agent-controlled configuration, with the
   treatment of authentication stated and verified using fixtures.
-- [ ] Existing login storage has a documented migration path that preserves it
+- [x] Existing login storage has a documented migration path that preserves it
   until the user deliberately chooses migration or deletion.
 - [ ] Dummy `.env`/key files outside the working copy are unavailable at runtime,
   and a build-context fixture proves excluded secrets cannot be copied by a build.
 - [ ] Image builds still succeed and each agent's first login, restart, rebuild,
   and logout behavior is verified, using manual checks where authentication is needed.
+
+## Validation evidence
+
+Fixture-only state tests cover selected mounts, provider markers, no-follow reset,
+retained dummy authentication and stop-before-reset across terminal/IDE projects.
+Launcher and effective Compose tests cover terminal/editor selection. CI's
+build-context fixture uses a scratch `COPY` build against ordinary and installed
+control layouts, asserting only image inputs are copied; smoke recreates selected
+Claude, Codex and shell profiles with dummy state. These Docker-host checks are
+wired into CI and were not run in the editing environment. Real first-login,
+restart/rebuild/logout and graphical editor acceptance remain manual; the final
+two checklist items stay open until that evidence is available.
 
 ## Review depth
 

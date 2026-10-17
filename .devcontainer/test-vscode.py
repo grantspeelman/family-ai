@@ -53,6 +53,7 @@ settings = json.loads((profile / 'User/settings.json').read_text())
 assert settings['dev.containers.gitCredentialHelperConfigLocation'] == 'none'
 assert settings['dev.containers.copyGitConfig'] is False
 assert settings['dev.containers.dockerCredentialHelper'] is False
+assert json.loads((pathlib.Path.cwd() / '.devcontainer/devcontainer.json').read_text())['customizations']['vscode']['extensions'] == ['openai.chatgpt']
 subprocess.run(['bash', str(pathlib.Path.cwd() / '.devcontainer/check-vscode-host.sh')], check=True)
 if '--install-extension' not in args:
     assert args[-2:] == ['--goto', 'two words:3']
@@ -63,7 +64,7 @@ if '--install-extension' not in args:
                        GH_TOKEN='dummy', GITHUB_TOKEN='dummy', SSH_AUTH_SOCK='/tmp/dummy.sock',
                        HOST_SSH_AUTH_SOCK='/tmp/dummy.sock', GIT_ASKPASS='/tmp/dummy',
                        AWS_SECRET_ACCESS_KEY='dummy')
-            result = subprocess.run(['bash', str(controls / 'start-vscode.sh'), '--goto', 'two words:3'],
+            result = subprocess.run(['bash', str(controls / 'start-vscode.sh'), '--codex', '--goto', 'two words:3'],
                                     env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 

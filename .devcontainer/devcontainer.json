@@ -1,6 +1,9 @@
 {
   "name": "family-ai",
-  "dockerComposeFile": "docker-compose.yml",
+  "dockerComposeFile": [
+    "docker-compose.yml",
+    "agent-state.compose.json"
+  ],
   "service": "app",
   "overrideCommand": false,
   "workspaceFolder": "/workspace",
@@ -9,9 +12,7 @@
   "updateRemoteUserUID": false,
   "customizations": {
     "vscode": {
-      "extensions": [
-        "anthropic.claude-code"
-      ],
+      "extensions": [],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "bash",
         "git.terminalAuthentication": false,
