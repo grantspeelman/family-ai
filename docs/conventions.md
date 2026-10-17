@@ -16,6 +16,7 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
 | Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | CI (`workflows` job: `actionlint` and `.github/scripts/check-workflow-rules.py`) | Workflow in place (plan 08). Checks syntax, untrusted input in `run:`, SHA pins, `persist-credentials`, `secrets.`, `pull_request_target` / `workflow_run` and read-only top-level permissions. Judgement rules (per-job write permissions, a reason for each) are for the reviewer. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Dependabot version updates | `.github/dependabot.yml` | Config in place (plan 10) for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
 | Dependency license check, registry app | CI | PR 2, not yet |
 | Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
 
@@ -52,6 +53,30 @@ Anyone can open a PR against this public repo, so no workflow may run untrusted 
 The `workflows` job checks part of rules 1 to 3 and 5 to 8, plus `actionlint`'s own syntax and expression checks: top-level permissions are present and not `write`; no `pull_request_target`, `workflow_run` or `secrets` reference; no `${{ }}` in a `run:` block; every `uses:` is SHA-pinned with a version comment; every checkout sets `persist-credentials: false`; every job has `timeout-minutes`. Reviewers still check: per-job permissions and their reasons, rule 4 (an API key can hide in a plain value, not just `secrets.`), the checksums of downloaded binaries, and anything the script cannot see. The script is a line-based text check, not a YAML parser, so a pass is not proof. Known limits: flow-style YAML (other than `permissions: {}`), anchors and aliases, untrusted input outside `run:` (such as an `actions/github-script` script), and `uses:` text inside `run:` blocks are not covered. The full list is in the script's docstring. Run both checks locally with `actionlint` and `python3 -I .github/scripts/check-workflow-rules.py` from the repo root. The audit of each existing workflow against these rules is in [docs/plans/08-workflow-safety.md](plans/08-workflow-safety.md).
 
 Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.md](github-settings.md).
+
+## Dependency updates (Dependabot)
+
+`.github/dependabot.yml` opens a weekly PR (Mondays, UTC) for each ecosystem that exists today. Nothing is auto-merged: every update is a normal PR, reviewed, and it must pass the `ci` gate like any other.
+
+| Ecosystem | Directory | What it updates | Open PR limit |
+| --- | --- | --- | --- |
+| `github-actions` | `/` | `uses:` lines in `.github/workflows/` | 5 |
+| `docker` | `/.devcontainer` | The `FROM` image in `.devcontainer/Dockerfile` | 3 |
+
+**New ecosystem rule.** A PR that introduces a new package ecosystem (Cargo with PR 1 or PR 6, the registry app's package manager with PR 2, and so on) adds that ecosystem's entry to `.github/dependabot.yml` in the same PR, with the same weekly schedule and an open-PR limit. Otherwise its dependencies go stale unnoticed. Reviewers check for it. The same applies to anything else the two entries above do not read, none of which exists today: local composite actions under `.github/actions/` (the `github-actions` entry at `/` does not cover them), a compose file with an `image:` line (the `docker` ecosystem does not read compose files; add a `docker-compose` entry), and devcontainer features or images in `devcontainer.json` (add a `devcontainers` entry). A PR adding any of these adds the matching entry in the same PR.
+
+**How it fits this repo's conventions**
+
+- Actions are pinned by full commit SHA with a trailing `# vX.Y.Z` comment (workflow safety rule 6). Dependabot reads that form and updates the SHA and the comment together, as long as the comment is on the same line. Keep that format or updates stop applying cleanly.
+- Dependabot PRs run the `ci` workflow as fork-like runs: a read-only `GITHUB_TOKEN` and no Actions secrets (GitHub's docs: [troubleshooting Dependabot on GitHub Actions](https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions), checked 2026-10-14). No workflow here uses a secret (rule 3; the `workflows` job fails on any `secrets` reference) and the top-level permission is `contents: read`, so they run unchanged. This holds for every Dependabot-triggered `push`, `pull_request` and `schedule` run, not just PRs. Dependabot secrets are a separate store that this repo does not use, so nothing here should reach for `secrets.` in a Dependabot-triggered job.
+- The `docker` entry only covers the `FROM` line. Dependabot does not touch the version and SHA-256 pins in `ARG` and `ENV` lines, or in workflow `env:`. These stay **manually maintained**, so nobody should assume they are covered:
+  - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, in `.devcontainer/Dockerfile`.
+  - `CST_VERSION` and `CST_SHA256` in the `image` job of `.github/workflows/devcontainer-ci.yml`.
+  - `ACTIONLINT_VERSION` and `ACTIONLINT_SHA256` in the `workflows` job of the same file.
+  - Packages installed from the Ubuntu archive follow the base image and are not pinned.
+
+  When bumping one by hand, take the new SHA-256 from the project's published checksums (workflow safety rule 6). There is no automation for this yet.
+- A base image bump can propose a tag the container does not suit (for example a non-LTS Ubuntu). A base-image bump is proposed by Dependabot but judged by a human: review it, and close it if it is not wanted. If the same unwanted tag would be proposed every week, add an `ignore` entry for it to the `docker` entry in `dependabot.yml`, with a comment giving the reason.
 
 ## Working principles
 
@@ -105,7 +130,7 @@ Open items:
 
 - **One concept per PR.** If a PR needs "and" to describe it, split it.
 - **Stacked branches.** Foundation PRs are stacked, one on the previous, on branches named `pr0/NN-slug` matching the plan number.
-- **Commit messages.** A short imperative summary line (for example "Add gitleaks pre-commit hook"), then a body only if the why is not obvious. Commits made by an agent end with a `Co-Authored-By:` line naming the agent.
+- **Commit messages.** A short imperative summary line (for example "Add gitleaks pre-commit hook"), then a body only if the why is not obvious. Commits made by an agent end with a `Co-Authored-By:` line naming the agent. Dependabot-authored titles are exempt: they use the prefixes set in `dependabot.yml` (`ci: Bump ...`, `devcontainer: Bump ...`).
 - **PR description.** Say what the PR does, link its plan, state the checklist status (each item ticked, or unticked with the reason), and state the review depth that applies (close read or skim).
 - **Plan status.** Set the plan's `Status` to `in progress` while the PR is open, and to `merged` with the PR link at the end (see `AGENTS.md`).
 - **Never bypass the hook** with `--no-verify`.
