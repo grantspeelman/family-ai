@@ -26,6 +26,8 @@ if [ -e "$d/docker_info_fails" ] && [[ " $* " == *" docker info "* ]]; then
     exit 1
 fi
 if [[ " $* " == *" docker info "* ]]; then echo "info" >> "$d/docker.info.log"; fi
+# Marker in the same output stream as start.sh's own messages, to check ordering.
+if [[ " $* " == *" up "* ]]; then echo "SHIM-COMPOSE-UP"; fi
 exit 0
 EOF
     # ssh-add -l pops the next status from l_seq (the last one repeats).
@@ -139,8 +141,8 @@ copy_checkout() {
 @test "default run does not use compose.docker.yml, --no-cache or --force-recreate" {
     start
     [ "$status" -eq 0 ]
-    ! calls | grep -q 'compose.docker.yml'
-    ! calls | grep -q -e '--no-cache' -e '--force-recreate' -e ' build '
+    if calls | grep -q 'compose.docker.yml'; then false; fi
+    if calls | grep -q -e '--no-cache' -e '--force-recreate' -e ' build '; then false; fi
 }
 
 @test "the project name is family-ai-<slug>-<cksum of the checkout path>" {
@@ -148,6 +150,22 @@ copy_checkout() {
     root="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
     digest="$(printf '%s' "$root" | cksum | cut -d ' ' -f 1)"
     [[ "$(nth_call 1)" == "compose -p family-ai-"*"-${digest} --env-file"* ]]
+}
+
+# A literal digest, so changing the algorithm (cksum) or its input is caught.
+# The checkout has to sit at a fixed path for this; it is removed afterwards.
+teardown() { rm -rf /tmp/family-ai-bats-fixed; }
+
+@test "the project name for a fixed checkout path has a known digest" {
+    rm -rf /tmp/family-ai-bats-fixed
+    mkdir -p /tmp/family-ai-bats-fixed/.devcontainer
+    cp "$BATS_TEST_DIRNAME/start.sh" "$BATS_TEST_DIRNAME/token-file-check.sh" \
+        /tmp/family-ai-bats-fixed/.devcontainer/
+    SCRIPT=/tmp/family-ai-bats-fixed/.devcontainer/start.sh
+    start
+    [ "$status" -eq 0 ]
+    # printf '%s' /tmp/family-ai-bats-fixed | cksum  ->  3421399678
+    [[ "$(nth_call 1)" == "compose -p family-ai-family-ai-bats-fixed-3421399678 --env-file"* ]]
 }
 
 @test "different checkout paths get different project names; the same path is stable" {
@@ -205,8 +223,8 @@ copy_checkout() {
     [ "$(wc -l < "$SHIMS/docker.info.log")" -eq 90 ]
     [ "$(wc -l < "$SHIMS/sleep.log")" -eq 89 ]
     calls | grep -q ' logs --tail 40 app$'
-    ! calls | grep -q 'postStartCommand'
-    ! calls | grep -q ' bash$'
+    if calls | grep -q 'postStartCommand'; then false; fi
+    if calls | grep -q ' bash$'; then false; fi
 }
 
 @test "--rebuild builds with --pull --no-cache, then up --detach --force-recreate" {
@@ -215,7 +233,7 @@ copy_checkout() {
     [[ "$output" == *"Rebuilding the image from scratch..."* ]]
     [[ "$(nth_call 1)" == *"compose.ssh.yml build --pull --no-cache" ]]
     [[ "$(nth_call 2)" == *"compose.ssh.yml up --detach --force-recreate" ]]
-    ! calls | grep -q -e '--build'
+    if calls | grep -q -e '--build'; then false; fi
 }
 
 @test "--rebuild --docker uses the docker compose file for build and up" {
@@ -315,7 +333,7 @@ EOF
     start
     [ "$status" -eq 0 ]
     [ ! -e "$SHIMS/ssh-agent.log" ]
-    ! grep -q '^add' "$SHIMS/ssh-add.log"
+    if grep -q '^add' "$SHIMS/ssh-add.log"; then false; fi
     [[ "$output" != *"holds no keys"* ]]
     head -n1 "$SHIMS/docker.env.log" | grep -q "HOST_SSH_AUTH_SOCK=$SOCK\$"
 }
@@ -456,9 +474,8 @@ EOF
     rm "$FAKE_HOME/.config/family-ai/gh.env"
     start
     [ "$status" -eq 0 ]
-    # Output order: warning, then the stop command printed after the build.
-    before="${output%%unauthenticated*}"
-    after="${output#*unauthenticated}"
-    [[ "$before" != *"Stop it with"* ]]
-    [[ "$after" == *"Stop it with"* ]]
+    # The shim prints SHIM-COMPOSE-UP when compose up runs; the warning must come first.
+    before="${output%%SHIM-COMPOSE-UP*}"
+    [[ "$output" == *SHIM-COMPOSE-UP* ]]
+    [[ "$before" == *unauthenticated* ]]
 }

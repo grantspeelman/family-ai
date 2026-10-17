@@ -13,7 +13,7 @@ Every bash script in the repo that can be exercised without Docker, a network or
 
 ## In scope
 
-- `.devcontainer/start.bats` (41 tests) for `start.sh`. Every external command it runs (`docker`, `ssh-agent`, `ssh-add`, `id`, `sleep`) is a shim in a temp dir first on `PATH`; `HOME` is a temp dir with a dummy token file.
+- `.devcontainer/start.bats` (42 tests) for `start.sh`. Every external command it runs (`docker`, `ssh-agent`, `ssh-add`, `id`, `sleep`) is a shim in a temp dir first on `PATH`; `HOME` is a temp dir with a dummy token file.
 - `.devcontainer/post-start.bats` (18 tests) for `postStartCommand.sh`.
 - `.devcontainer/entrypoint.bats` (7 tests) for `entrypoint.sh`.
 - `.lefthook/placeholder.bats` (12 tests) for `.lefthook/placeholder.sh`.
@@ -28,7 +28,7 @@ Every bash script in the repo that can be exercised without Docker, a network or
 
 ## Acceptance checklist
 
-- [x] All five tracked-or-new `.bats` files (86 tests) pass from the repo root and from another directory using absolute paths, three runs in a row with no flakiness.
+- [x] All five tracked-or-new `.bats` files (87 tests) pass from the repo root and from another directory using absolute paths, three runs in a row with no flakiness.
 - [x] The CI discovery logic (mapfile, zero-files guard, `./` prefix) finds all five files when run locally.
 - [x] Tests leave nothing outside `BATS_TEST_TMPDIR` (`git status` and the real `HOME` unchanged by a run).
 - [x] Total runtime is under 30 seconds.
@@ -43,16 +43,21 @@ Possible bugs seen while writing the tests. None is fixed in this PR; the owner 
 - (a) `entrypoint.sh`: the background daemon log redirects fail silently when `/var/log` is not writable, and the script then waits the full 60 seconds.
 - (b) `postStartCommand.sh`: an invalid `settings.json` makes the script abort after `jq` has truncated `settings.json.tmp`, leaving a stale `.tmp` file.
 - (c) `start.sh` treats `-h` and `--help` as an unknown flag (exit 64).
-- (d) `start.sh`: a failing `ssh-agent -a` aborts silently (output goes to `/dev/null` and `set -e` applies). The same happens when the fixed socket's directory (`~/.ssh`) does not exist.
+- (d) `start.sh`: a failing `ssh-agent -a` aborts with no `start.sh` message (ssh-agent's stdout goes to `/dev/null`; its stderr still shows). The same happens when the fixed socket's directory (`~/.ssh`) does not exist.
 - (e) `start.sh --docker` keeps polling for 90 seconds even if the container has exited.
 - (f) `start.sh` replaces a dead session agent silently.
 - (g) `placeholder.sh` counts arguments, not files, so nonexistent paths and empty-string arguments count.
+- (h) `entrypoint.sh` hardcodes the dockerd and containerd log paths under `/var/log`. A configurable log path would let the tests assert that the daemons are launched (see Known test limits).
 
 ## Known test limits
 
 - `post-start.bats` depends on whether `/workspace/.git` and `/workspace/Cargo.toml` exist on the machine, because the script uses those absolute paths.
 - The docker-mode tests in `entrypoint.bats` skip when `/var/log` is writable (running as root).
 - The `chmod 000` test in `placeholder.bats` is weaker when run as root, since root ignores file modes.
+
+- `entrypoint.bats` never asserts that dockerd and containerd are launched. The log paths are hardcoded under `/var/log`: in CI it is not writable, so the redirect fails before the shim runs, and as root the docker-mode tests skip. See finding (h).
+- `post-start.bats` covers one side of each `/workspace` branch per environment (in CI the "not called" side, since `/workspace/Cargo.toml` is absent), so a mutation to `cargo fetch --locked` survives in CI.
+- Mid-test assertions use `if cmd; then false; fi` instead of `! cmd`, because bash ignores a failing `!` command under `set -e` unless it is the last one.
 
 ## Review depth
 

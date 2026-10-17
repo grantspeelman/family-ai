@@ -57,8 +57,8 @@ skip_if_log_writable() {
 @test "ENABLE_DOCKER set to something other than 1 is treated as off" {
     ENABLE_DOCKER=yes run "$SCRIPT" true
     [ "$status" -eq 0 ]
-    ! grep -q docker "$CALLS"
-    ! grep -q containerd "$CALLS"
+    if grep -q docker "$CALLS"; then false; fi
+    if grep -q containerd "$CALLS"; then false; fi
 }
 
 @test "exit status of the script is gosu's (exec), arguments pass through" {
@@ -72,7 +72,7 @@ skip_if_log_writable() {
     ENABLE_DOCKER=1 run "$SCRIPT" bash -c 'echo hi'
     [ "$status" -eq 0 ]
     grep -qx 'docker info' "$CALLS"
-    ! grep -qx sleep "$CALLS"
+    if grep -qx sleep "$CALLS"; then false; fi
     [ "$(tail -n 1 "$CALLS")" = "gosu [vscode] [bash] [-c] [echo hi]" ]
 }
 
@@ -94,5 +94,5 @@ skip_if_log_writable() {
     # 60 attempts: the 60th fails the countdown before its sleep.
     [ "$(grep -cx 'docker info' "$CALLS")" -eq 60 ]
     [ "$(grep -cx sleep "$CALLS")" -eq 59 ]
-    ! grep -q '^gosu' "$CALLS"
+    if grep -q '^gosu' "$CALLS"; then false; fi
 }

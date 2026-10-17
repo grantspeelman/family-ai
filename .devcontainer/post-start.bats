@@ -43,7 +43,7 @@ setup() {
     if [ -d /workspace/.git ]; then
         grep -qx 'lefthook install' "$CALLS"
     else
-        ! grep -q lefthook "$CALLS"
+        if grep -q lefthook "$CALLS"; then false; fi
     fi
 }
 
@@ -53,7 +53,7 @@ setup() {
     if [ -f /workspace/Cargo.toml ]; then
         grep -qx 'cargo fetch --locked' "$CALLS"
     else
-        ! grep -q cargo "$CALLS"
+        if grep -q cargo "$CALLS"; then false; fi
     fi
 }
 
@@ -157,5 +157,6 @@ setup() {
     GH_TOKEN=dummy SSH_AUTH_SOCK=/dummy.sock run "$SCRIPT"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
+    # Only a guard: the script is not expected to write the global git config here.
     [ ! -s "$GIT_CONFIG_GLOBAL" ]
 }
