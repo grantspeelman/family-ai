@@ -29,20 +29,12 @@ There is no application code yet. Language and framework rules arrive with the P
 
 ## Running the checks
 
-Today the only automated check is the secret scan. Inside the container:
+Write tests first (TDD) and run the tests for the code you are changing. Do not run sanity passes of the whole test suite or lint every file; focus on the task at hand.
 
-```
-lefthook run pre-commit                                          # what the commit hook runs
-gitleaks git --pre-commit --staged --redact --no-banner --verbose   # the scan itself, on staged changes
-```
+- **On commit:** lefthook (`lefthook.yml`) runs the minimum required checks on the files you changed. It is installed into `.git/hooks` by `.devcontainer/postStartCommand.sh`, so it runs on commits made inside the dev container; commits outside it skip the hook. Never bypass it with `--no-verify`. If it blocks a commit, fix the finding; any allowlist entry needs a written reason.
+- **On the PR:** CI runs the full checks, so whatever the hook does not cover is caught there.
 
-The two commands are the same check; the first runs the second through the hook configuration. If the hook blocks a commit, fix or remove the finding. Never bypass it with `--no-verify`; any allowlist entry needs a written reason.
-
-The hook is installed into `.git/hooks` by `.devcontainer/postStartCommand.sh`, so it runs on every commit made inside the container. Commits outside the container skip it; CI is the backstop.
-
-Checks for the container image itself (`.devcontainer/smoke-test.sh`, `.devcontainer/container-structure-test.yaml`) are described in `.devcontainer/README.md` and run in CI.
-
-There is no test suite yet. When a PR adds one, that PR adds its command to this section.
+Today the hook runs only the secret scan, and there is no test suite yet. Each PR that adds a check or a test suite says how to run it in its own plan.
 
 ## Per-PR workflow
 
@@ -51,7 +43,7 @@ Plans are numbered. Each builds on the plans listed under its "Builds on", and e
 1. Start from the plan in `docs/plans/`. One plan, one PR; do not build other plans' work.
 2. Restate the plan (goal, scope, checklist) and confirm you understand it before touching anything.
 3. Implement only what is in scope. Set the plan's `Status` to `in progress`; it stays that way while the PR is open.
-4. Run the tests and checks and show them passing. Do not mark the PR done on memory.
+4. Write the tests first, then the code, and run the tests for what you changed and show them passing. Do not mark the PR done on memory.
 5. Tick only the checklist items you verified; leave the rest unticked with a reason. The PR is done only when every item is ticked, or each unticked one has a stated reason (owner action, needs a real CI run, and so on).
 6. Once the PR exists and is ready, flip `Status` to `merged` with the PR link in a final one-line push to that same PR.
 

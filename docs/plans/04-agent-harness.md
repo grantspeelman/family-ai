@@ -24,9 +24,9 @@ Claude (and any other coding agent) opens the repo and finds out how to work in 
 
 ## Acceptance checklist
 
-- [ ] `AGENTS.md` exists, links to `docs/plans/` and the conventions document, and is under about 100 lines. (Exists, links `docs/plans/`, 73 lines. Unticked: the conventions document is delivered by plan 05 and does not exist yet. `AGENTS.md` links the plan, `docs/plans/05-conventions.md`, and says the document arrives with it.)
-- [x] Every command that runs inside the container has been run; host-side commands are checked against the scripts. (`lefthook run pre-commit` and the `gitleaks` command were run in the container and pass. `start.sh` and its flags were checked against `.devcontainer/start.sh` and `.devcontainer/README.md`, not run.)
-- [x] It states the per-PR workflow: start from the plan, restate it, implement, run tests and show them passing.
+- [ ] `AGENTS.md` exists, links to `docs/plans/` and the conventions document, and is under about 100 lines. (Exists, links `docs/plans/`, 56 lines. Unticked: the conventions document is delivered by plan 05 and does not exist yet. `AGENTS.md` links the plan, `docs/plans/05-conventions.md`, and says the document arrives with it.)
+- [x] Every command it gives has been run or checked against the scripts. (It now gives no commands: it describes the commit hook and CI in words and points to `lefthook.yml` and `.devcontainer/README.md`. The hook itself, `lefthook run pre-commit`, was run in the container and passes.)
+- [x] It states the per-PR workflow: start from the plan, restate it, write tests first, implement, run the tests for what changed and show them passing. It says not to sanity-run the whole suite or lint every file, because the commit hook and CI cover that.
 - [x] `.claude/settings.local.json` is gitignored; any committed `.claude/` file is deliberate and contains nothing personal. (`git check-ignore` confirms the repo `.gitignore` rule; nothing under `.claude/` is committed.)
 - [ ] A fresh agent session, asked "how do I run the checks?", answers correctly from the repo alone. (Left for the reviewer: re-reading `AGENTS.md` myself is not the check described. Self-read found the "Running the checks" section answers the question, but no fresh session was run.)
 
