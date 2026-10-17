@@ -2,6 +2,8 @@
 
 Entry point for coding agents (Claude Code and others). Read it in full before changing anything.
 
+Development is expected to happen inside the dev container; `.devcontainer/README.md` explains how to start it.
+
 family-ai is a public repo (AGPL-3.0). There is no `CLAUDE.md`; this file is the single entry point.
 
 ## Public repo: keep security concerns private
@@ -24,17 +26,6 @@ Do not put security concerns about the local environment there. That includes cr
 | `.github/workflows/` | CI. |
 
 There is no application code yet. Language and framework rules arrive with the PRs that introduce those stacks.
-
-## Entering the container
-
-Work happens in the dev container, where the tools and the commit hook are installed. From a host terminal:
-
-```
-.devcontainer/start.sh             # build if needed, start, open a shell; rerun to get back in
-.devcontainer/start.sh --rebuild   # rebuild the image from scratch
-```
-
-`--docker` adds nested Docker (privileged); use it only when a task needs Docker. Details in `.devcontainer/README.md`. If `command -v gitleaks lefthook` finds both, you are likely already inside it.
 
 ## Running the checks
 
