@@ -4,7 +4,7 @@ Settings that live in GitHub, not in the repo, so a PR cannot apply them. The re
 
 ## Require the CI gate before merging to `main`
 
-The workflow `.github/workflows/devcontainer-ci.yml` ends in one job named `ci`. It succeeds only if every job listed in its `needs:` succeeded, so `ci` is the only status check branch protection needs to require. A job added to that `needs:` list is gated automatically.
+The workflow `.github/workflows/devcontainer-ci.yml` ends in one job named `ci`. It succeeds only if every job listed in its `needs:` succeeded, so `ci` is the only status check branch protection needs to require. A job is gated only once it is in that `needs:` list.
 
 The check name `ci` only appears in GitHub's search box after the workflow has run once on a PR or on `main`. Merge or open the PR that adds it first, let it run, then do the steps below.
 

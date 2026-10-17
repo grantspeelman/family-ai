@@ -14,13 +14,13 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
-| Merge gate: one required `ci` check over all CI jobs | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It runs the container checks, the full-history secret scan and the hook over the whole tree. The hook's gitleaks step scans nothing there (it only looks at staged files, and none are staged), so the full-history scan is the secret check. Lint, tests, duplication, complexity and license checks are not wired yet (PRs 2 and 7). Requiring it in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Dependency license check, registry app | CI | PR 2, not yet |
 | Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
 
 ## Pre-commit hook: what passing means, and adding a language
 
-The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: today it runs the container checks and the full-history secret scan, and it will run the full suite (lint, tests, duplication, complexity, licenses) once PRs 2 and 7 land.
+The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks and the full-history secret scan.
 
 **Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that lint, tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders.
 
@@ -41,8 +41,9 @@ These apply to every PR, not just the foundation ones.
 
 1. **Start from a written spec.** Each PR starts from its plan (a short spec and checklist). The agent restates the goal, scope and checklist and confirms it understands before touching code.
 2. **Decide review depth per PR, and size the PR by it.** Each plan says whether it needs a close read or a skim (see sizing below).
-3. **The agent runs the tests itself and shows them passing** before marking a PR done. The pre-commit hook backs this up on changed files; it does not replace running the tests, and CI is the real gate (it will run the full suite once PRs 2 and 7 land; today it runs the container checks and the full-history secret scan).
-4. **Keep PRs small enough for a quick loop.** Rust compile times are slow, so large PRs make the test-fix-retest loop painful for the agent.
+3. **The agent runs the tests itself and shows them passing** before marking a PR done. The pre-commit hook backs this up on changed files; it does not replace running the tests, and CI is the real gate.
+4. **A PR that adds a test or lint job adds it to `ci`'s `needs:` in the same PR.** Otherwise the job runs but does not gate merging.
+5. **Keep PRs small enough for a quick loop.** Rust compile times are slow, so large PRs make the test-fix-retest loop painful for the agent.
 
 ## Sizing rule
 
