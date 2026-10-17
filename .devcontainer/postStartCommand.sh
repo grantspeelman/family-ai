@@ -6,7 +6,7 @@ set -euo pipefail
 
 config_dir="${CLAUDE_CONFIG_DIR:?CLAUDE_CONFIG_DIR is set in the Dockerfile}"
 
-# Git hooks: git hooks (see /lefthook.yml).
+# Git hooks: secret scan and changed-files checks on every commit (see /lefthook.yml).
 if [ -d /workspace/.git ]; then
   lefthook install
 fi
