@@ -17,6 +17,13 @@ services:
       timeout: 3s
       retries: 15
   app:
+    user: vscode
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # Bound runaway commands while allowing parallel Rust and agent workloads.
+    cpus: 4
+    mem_limit: 8g
+    pids_limit: 512
     # No veth, Docker DNS, LAN or IPv6 route. Only loopback development services
     # and the external gateway's Unix socket are reachable, even as app root.
     network_mode: none

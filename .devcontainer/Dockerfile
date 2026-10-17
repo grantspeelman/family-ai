@@ -17,7 +17,6 @@ ARG USER_GID=1000
 #   • rustc/cargo/rustfmt/rust-clippy (Rust 1.93): the toolchain for the registry and
 #     family apps. build-essential gives cargo a linker and C compiler, and
 #     sqlite3/libsqlite3-dev/pkg-config cover the family app's SQLite database.
-#   • gosu: the entrypoint drops to vscode for the container command.
 #   • bubblewrap/socat: what Claude Code's Linux sandbox (/sandbox) runs on. They
 #     need unprivileged user namespaces, which some hosts restrict.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cargo \
     curl \
     git \
-    gosu \
     jq \
     less \
     libsqlite3-dev \
@@ -144,10 +142,10 @@ RUN set -eux; \
     else \
         useradd -l -m -d /home/vscode -s /bin/bash -g "${USER_GID}" -u "${USER_UID}" vscode; \
     fi; \
-    # Passwordless sudo for the vscode user.
-    printf '%s\n' 'vscode ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/vscode; \
-    chmod 0440 /etc/sudoers.d/vscode; \
-    visudo -cf /etc/sudoers.d/vscode
+    # Do not inherit the base user's supplementary groups or sudo rules.
+    usermod -G '' vscode; \
+    usermod -L vscode; \
+    rm -f /etc/sudoers.d/*
 
 # Claude's config dir is a named volume (see docker-compose.yml) so the login
 # survives rebuilds. Creating it here, vscode-owned, means Docker seeds a fresh
@@ -162,8 +160,7 @@ WORKDIR /workspace
 COPY .devcontainer/egress/proxy.py /usr/local/lib/egress-proxy.py
 COPY .devcontainer/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-# The entrypoint starts as root and gosu-drops to vscode itself.
-# hadolint ignore=DL3002
-USER root
+# No runtime ownership repair or privileged bootstrap.
+USER vscode
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["sleep", "infinity"]

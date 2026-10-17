@@ -39,6 +39,13 @@ docker inspect "$container_id" | jq -e '
     .[0] | .HostConfig.Privileged == false
     and ((.HostConfig.Devices // []) | length == 0)
     and ((.HostConfig.CapAdd // []) | length == 0)
+    and (.Config.User == "vscode")
+    and (.HostConfig.CapDrop == ["ALL"])
+    and (.HostConfig.SecurityOpt == ["no-new-privileges:true"])
+    and (.AppArmorProfile != "unconfined")
+    and (.HostConfig.Memory == 8589934592)
+    and (.HostConfig.NanoCpus == 4000000000)
+    and (.HostConfig.PidsLimit == 512)
     and (.HostConfig.NetworkMode == "none")
     and (.HostConfig.PidMode != "host")
     and all(.Mounts[]; .Destination == "/workspace"
@@ -47,6 +54,20 @@ docker inspect "$container_id" | jq -e '
         or (.Destination == "/run/egress" and .RW == false))' >/dev/null \
     || fail "unexpected agent runtime privileges or mounts"
 pass "agent runtime privileges and mounts checked"
+# Compile on the trusted runner; Docker copies it root-owned with its setuid mode.
+# The probe only reports effective UID and has no privileged side effects.
+cat > "$tmp/probe.c" <<'PROBE'
+#include <stdio.h>
+#include <unistd.h>
+int main(void) { printf("%lu\n", (unsigned long)geteuid()); return 0; }
+PROBE
+cc "$tmp/probe.c" -o "$tmp/runtime-setuid-probe"
+chmod 4755 "$tmp/runtime-setuid-probe"
+docker cp "$tmp/runtime-setuid-probe" "$container_id:/tmp/runtime-setuid-probe"
+# No --user override: verify the default terminal/IDE container execution user.
+"${BASE[@]}" exec -T app python3 -I /workspace/.devcontainer/test-privileges.py \
+    || fail "non-root runtime checks failed"
+pass "runtime identity, privilege boundaries, immutable tools and fresh volumes checked"
 in_container 'python3 -I /workspace/.devcontainer/egress/test-network.py' \
     || fail "network isolation checks failed"
 pass "DNS, IPv4, IPv6 and proxy-bypass checks passed"

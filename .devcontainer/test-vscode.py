@@ -37,6 +37,8 @@ assert os.environ.get('GIT_ASKPASS') is None
 assert os.environ.get('AWS_SECRET_ACCESS_KEY') is None
 assert os.environ['GIT_CONFIG_GLOBAL'] == '/dev/null'
 assert os.environ['GIT_CONFIG_NOSYSTEM'] == '1'
+assert int(os.environ['USER_UID']) > 0
+assert int(os.environ['USER_GID']) > 0
 assert not (pathlib.Path.home() / '.gitconfig').exists()
 assert not (pathlib.Path.home() / '.ssh').exists()
 assert not (pathlib.Path.home() / '.config/gh').exists()

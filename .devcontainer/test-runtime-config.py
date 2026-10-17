@@ -9,6 +9,15 @@ ROOT = Path(__file__).resolve().parent
 
 
 class RuntimeConfigTests(unittest.TestCase):
+    def test_image_and_editor_start_without_root(self):
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        self.assertIn("USER vscode", dockerfile)
+        self.assertNotIn("NOPASSWD", dockerfile)
+        self.assertNotIn("gosu", (ROOT / "entrypoint.sh").read_text())
+        editor = json.loads((ROOT / "devcontainer.json").read_text())
+        self.assertEqual(editor["containerUser"], "vscode")
+        self.assertFalse(editor["updateRemoteUserUID"])
+
     def test_entry_points_have_no_docker_authority(self):
         vscode = json.loads((ROOT / "devcontainer.json").read_text())
         files = vscode["dockerComposeFile"]
@@ -44,6 +53,12 @@ class RuntimeConfigTests(unittest.TestCase):
                 self.assertFalse(app.get("devices"))
                 self.assertFalse(app.get("device_cgroup_rules"))
                 self.assertFalse(app.get("cap_add"))
+                self.assertEqual(app["user"], "vscode")
+                self.assertEqual(app["cap_drop"], ["ALL"])
+                self.assertEqual(app["security_opt"], ["no-new-privileges:true"])
+                self.assertEqual(app["pids_limit"], 512)
+                self.assertEqual(app["mem_limit"], "8589934592")
+                self.assertEqual(float(app["cpus"]), 4.0)
                 self.assertEqual(app.get("network_mode"), "none")
                 self.assertNotEqual(app.get("pid"), "host")
                 environment = app.get("environment", {})

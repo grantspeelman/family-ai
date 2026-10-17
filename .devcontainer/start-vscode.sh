@@ -29,7 +29,14 @@ JSON
 # Start a separate process, with no inherited tokens, askpass helpers, SSH agent
 # or provider keys. Preserve only the host variables needed to reach the GUI and
 # Docker context. Never pass a host Docker API credential environment variable.
-clean_env=(env -i "PATH=$PATH" "HOME=$profile_root/home"
+# Match bind-mount ownership at build time rather than mutating runtime users.
+editor_uid="$(id -u)"
+editor_gid="$(id -g)"
+if [ "$editor_uid" -eq 0 ] || [ "$editor_gid" -eq 0 ]; then
+    echo 'Start the editor as a non-root host user.' >&2
+    exit 64
+fi
+clean_env=(env -i "USER_UID=$editor_uid" "USER_GID=$editor_gid" "PATH=$PATH" "HOME=$profile_root/home"
     "XDG_CONFIG_HOME=$profile_root/home/.config"
     "XDG_DATA_HOME=$profile_root/home/.local/share"
     "XDG_CACHE_HOME=$profile_root/home/.cache"
