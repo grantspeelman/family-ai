@@ -14,13 +14,14 @@ Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` 
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
-| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Workflow safety rules (below) | CI (`workflows` job: `actionlint` and `.github/scripts/check-workflow-rules.py`) | Workflow in place (plan 08). Checks syntax, untrusted input in `run:`, SHA pins, `persist-credentials`, `secrets.`, `pull_request_target` / `workflow_run` and read-only top-level permissions. Judgement rules (per-job write permissions, a reason for each) are for the reviewer. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Dependency license check, registry app | CI | PR 2, not yet |
 | Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
 
 ## Pre-commit hook: what passing means, and adding a language
 
-The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks and the full-history secret scan.
+The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint and the full-history secret scan.
 
 **Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that lint, tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders.
 
@@ -34,6 +35,23 @@ To add a language's checks (PRs 2 and 7), edit the matching step in `lefthook.ym
 4. Delete the `# PLACEHOLDER` comment above the step, and update the table above and the "Running the checks" section of `AGENTS.md`.
 
 For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it only runs when dependencies change.
+
+## Workflow safety
+
+Anyone can open a PR against this public repo, so no workflow may run untrusted code with secrets or write access available. Every workflow in `.github/workflows/` follows these rules. A new or changed workflow is checked against them in review, and the `workflows` CI job checks the mechanical ones.
+
+1. **Read-only by default.** Set `permissions: contents: read` at the top of the workflow. Anything broader is set on the one job that needs it, with a comment giving the reason.
+2. **No `pull_request_target` or `workflow_run`** that checks out or runs fork code. The check script is stricter and bans both triggers outright, so adding one needs a deliberate change to the script and a written reason. Today no workflow uses either; use plain `pull_request`, which gives fork PRs a read-only token and no secrets.
+3. **Fork PRs get no secrets, so workflows must not need any.** No `secrets.` reference in a workflow unless a reviewer has agreed it is safe and the reason is written next to it.
+4. **No real Fly token or API key in GitHub Actions.** CI runs against the Fly mock.
+5. **Untrusted input never goes straight into `run:`.** PR titles, branch names, issue text and anything else under a contributor's control (`github.head_ref`, `github.event.*`) is passed through `env:` and read as a shell variable. No `${{ }}` expression inside a `run:` script.
+6. **Third-party actions are pinned by full commit SHA**, with the version in a trailing comment (`uses: owner/action@<40 hex> # v1.2.3`). Tags and branches move; a SHA does not. Downloaded binaries are pinned by version and verified against a SHA-256 taken from the project's published checksums.
+7. **`persist-credentials: false` on checkout** unless the job must push.
+8. **Every job has `timeout-minutes`.**
+
+The `workflows` job checks part of rules 1 to 3 and 5 to 8, plus `actionlint`'s own syntax and expression checks: top-level permissions are present and not `write`; no `pull_request_target`, `workflow_run` or `secrets` reference; no `${{ }}` in a `run:` block; every `uses:` is SHA-pinned with a version comment; every checkout sets `persist-credentials: false`; every job has `timeout-minutes`. Reviewers still check: per-job permissions and their reasons, rule 4 (an API key can hide in a plain value, not just `secrets.`), the checksums of downloaded binaries, and anything the script cannot see. The script is a line-based text check, not a YAML parser, so a pass is not proof. Known limits: flow-style YAML (other than `permissions: {}`), anchors and aliases, untrusted input outside `run:` (such as an `actions/github-script` script), and `uses:` text inside `run:` blocks are not covered. The full list is in the script's docstring. Run both checks locally with `actionlint` and `python3 -I .github/scripts/check-workflow-rules.py` from the repo root. The audit of each existing workflow against these rules is in [docs/plans/08-workflow-safety.md](plans/08-workflow-safety.md).
+
+Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.md](github-settings.md).
 
 ## Working principles
 
