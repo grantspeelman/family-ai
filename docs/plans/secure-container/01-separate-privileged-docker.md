@@ -1,6 +1,6 @@
 # 01 — Separate privileged Docker work
 
-**Status:** planned
+**Status:** in progress
 
 ## Goal
 
@@ -35,11 +35,11 @@ untrusted commands.
 
 - [ ] Normal terminal and VS Code agent sessions are not privileged and expose
   no host Docker socket, host device mounts, or unrestricted Docker API.
-- [ ] Launcher tests cover agent shortcuts, arbitrary commands, and rejected
+- [x] Launcher tests cover agent shortcuts, arbitrary commands, and rejected
   privileged-mode options without contacting a real Docker daemon.
 - [ ] The replacement route for Docker-dependent checks is documented and a
   representative check succeeds through it.
-- [ ] Container smoke tests no longer require privileged agent runtime access;
+- [x] Container smoke tests no longer require privileged agent runtime access;
   any privileged CI-only test has a separately justified boundary.
 - [ ] Existing image and relevant launcher/runtime checks pass, with any CI
   changes included in the required `ci` gate.
@@ -48,3 +48,16 @@ untrusted commands.
 
 **Close read.** Review effective privileges, mounts, alternate entry points, and
 the separation between the agent and Docker execution authority.
+
+## Validation notes
+
+- Six launcher tests pass, including rejected `--docker` options and preserved
+  arbitrary command arguments.
+- Effective Compose checks pass for terminal, VS Code, and smoke entry points
+  without a Docker daemon.
+- Shell syntax, workflow safety rules, pinned actionlint 1.7.12, and whitespace
+  checks pass.
+- Docker check requests and result inspection are documented in the dev
+  container README; the existing required CI jobs perform image and runtime
+  validation. Image builds, structure tests, and runtime smoke checks await CI;
+  no Docker daemon was available in the implementation environment.

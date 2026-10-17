@@ -59,6 +59,16 @@ class StartTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(calls[-1][0], args[-1].removeprefix("--") if len(args) == 1 else "codex")
 
+    def test_removed_docker_mode_fails_before_docker(self):
+        for args in [("--docker",), ("--docker", "--codex"),
+                     ("--claude", "--docker"), ("--docker", "--", "bash")]:
+            with self.subTest(args=args):
+                result, calls = self.run_start(*args)
+                self.assertEqual(result.returncode, 64)
+                self.assertEqual(calls, [])
+                self.assertIn("CI", result.stderr)
+                self.assertIn(".devcontainer/README.md", result.stderr)
+
     def test_invalid_options_fail_before_docker(self):
         for args in [("--unknown",), ("--claude", "--codex"), ("--",),
                      ("--claude", "--", "echo", "hi")]:

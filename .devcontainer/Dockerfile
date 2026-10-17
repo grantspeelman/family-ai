@@ -17,10 +17,7 @@ ARG USER_GID=1000
 #   • rustc/cargo/rustfmt/rust-clippy (Rust 1.93): the toolchain for the registry and
 #     family apps. build-essential gives cargo a linker and C compiler, and
 #     sqlite3/libsqlite3-dev/pkg-config cover the family app's SQLite database.
-#   • gosu: the entrypoint runs as root (for dockerd) and drops to vscode with it.
-#   • docker.io & co.: for `start.sh --docker` only. dockerd is started by
-#     /entrypoint.sh when ENABLE_DOCKER=1, which compose.docker.yml sets alongside
-#     privileged mode; otherwise the binaries sit unused.
+#   • gosu: the entrypoint drops to vscode for the container command.
 #   • bubblewrap/socat: what Claude Code's Linux sandbox (/sandbox) runs on. They
 #     need unprivileged user namespaces, which some hosts restrict.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -29,12 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     cargo \
     curl \
-    docker-buildx \
-    docker-compose-v2 \
-    docker.io \
     git \
     gosu \
-    iptables \
     jq \
     less \
     libsqlite3-dev \
@@ -154,8 +147,7 @@ RUN set -eux; \
     # Passwordless sudo for the vscode user.
     printf '%s\n' 'vscode ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/vscode; \
     chmod 0440 /etc/sudoers.d/vscode; \
-    visudo -cf /etc/sudoers.d/vscode; \
-    usermod -aG docker vscode
+    visudo -cf /etc/sudoers.d/vscode
 
 # Claude's config dir is a named volume (see docker-compose.yml) so the login
 # survives rebuilds. Creating it here, vscode-owned, means Docker seeds a fresh
@@ -169,7 +161,7 @@ WORKDIR /workspace
 
 COPY .devcontainer/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-# The entrypoint starts as root (for optional dockerd) and gosu-drops to vscode itself.
+# The entrypoint starts as root and gosu-drops to vscode itself.
 # hadolint ignore=DL3002
 USER root
 ENTRYPOINT ["/entrypoint.sh"]
