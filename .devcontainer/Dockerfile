@@ -159,6 +159,7 @@ RUN mkdir -p /workspace "${CLAUDE_CONFIG_DIR}" "${CODEX_HOME}" && \
     chown vscode:vscode /workspace "${CLAUDE_CONFIG_DIR}" "${CODEX_HOME}"
 WORKDIR /workspace
 
+COPY .devcontainer/egress/proxy.py /usr/local/lib/egress-proxy.py
 COPY .devcontainer/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 # The entrypoint starts as root and gosu-drops to vscode itself.

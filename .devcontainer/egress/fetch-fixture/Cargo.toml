@@ -1,0 +1,8 @@
+[package]
+name = "egress-fetch-check"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+memchr = "=2.7.4"

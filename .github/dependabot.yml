@@ -25,3 +25,22 @@ updates:
     open-pull-requests-limit: 3
     commit-message:
       prefix: "devcontainer"
+
+  # Runtime gateway image and the locked dependency-fetch test fixture.
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer/egress"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "devcontainer"
+
+  - package-ecosystem: "cargo"
+    directory: "/.devcontainer/egress/fetch-fixture"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "test"

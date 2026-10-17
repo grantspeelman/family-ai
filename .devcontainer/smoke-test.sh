@@ -39,13 +39,23 @@ docker inspect "$container_id" | jq -e '
     .[0] | .HostConfig.Privileged == false
     and ((.HostConfig.Devices // []) | length == 0)
     and ((.HostConfig.CapAdd // []) | length == 0)
-    and (.HostConfig.NetworkMode != "host")
+    and (.HostConfig.NetworkMode == "none")
     and (.HostConfig.PidMode != "host")
     and all(.Mounts[]; .Destination == "/workspace"
         or .Destination == "/home/vscode/.claude"
-        or .Destination == "/home/vscode/.codex")' >/dev/null \
+        or .Destination == "/home/vscode/.codex"
+        or (.Destination == "/run/egress" and .RW == false))' >/dev/null \
     || fail "unexpected agent runtime privileges or mounts"
 pass "agent runtime privileges and mounts checked"
+in_container 'python3 -I /workspace/.devcontainer/egress/test-network.py' \
+    || fail "network isolation checks failed"
+pass "DNS, IPv4, IPv6 and proxy-bypass checks passed"
+# Real public, secret-free HTTPS requests check the relay and approved registry.
+in_container 'curl --fail --silent --show-error --max-time 30 https://index.crates.io/config.json >/dev/null' \
+    || fail "allowed registry HTTPS request failed"
+in_container 'if curl --silent --fail --max-time 5 https://example.invalid/; then exit 1; fi' \
+    || fail "unapproved proxy destination accepted"
+pass "allowed HTTPS destination works and unapproved destination is denied"
 in_container '! command -v docker && ! command -v dockerd && ! command -v containerd' \
     || fail "Docker binaries present in agent image"
 in_container 'test ! -S /var/run/docker.sock && test ! -S /run/containerd/containerd.sock' \
@@ -76,6 +86,10 @@ in_container '
     cargo build --quiet && cargo test --quiet && cargo clippy --quiet -- -D warnings && cargo fmt --check' \
     || fail "Rust build/test/clippy/fmt failed"
 pass "cargo build, test, clippy and fmt work"
+in_container 'cp -r /workspace/.devcontainer/egress/fetch-fixture /tmp/fetch-fixture &&
+    CARGO_HOME=/tmp/fetch-home cargo fetch --locked --manifest-path /tmp/fetch-fixture/Cargo.toml' \
+    || fail "locked dependency fetch through gateway failed"
+pass "locked dependency fetch works through gateway"
 
 [ "$(in_container "sqlite3 :memory: 'select 21*2'")" = 42 ] || fail "sqlite3 did not answer"
 pass "sqlite3 works"
@@ -97,4 +111,12 @@ in_container '
     echo clean > ok.txt; git add ok.txt; git commit -qm clean >/dev/null 2>&1' || fail "clean change was not committed"
 pass "clean change commits normally"
 
+# Losing the gateway cannot reopen direct egress. New sessions fail closed.
+"${BASE[@]}" stop egress >/dev/null
+in_container 'if curl --fail --silent --max-time 3 https://index.crates.io/config.json; then exit 1; fi' \
+    || fail "gateway loss did not stop egress"
+if "${BASE[@]}" run --rm --no-deps -T app true >/dev/null 2>&1; then
+    fail "normal session started without gateway"
+fi
+pass "gateway loss denies requests and normal session startup"
 echo "all smoke tests passed"

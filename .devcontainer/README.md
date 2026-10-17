@@ -178,3 +178,13 @@ It does not mount a Docker socket or start a nested daemon.
 CI (`.github/workflows/devcontainer-ci.yml`) runs the image and smoke checks on
 every push to `main` and every PR. Launcher tests and effective Compose
 configuration checks run in the existing `image` job without agent logins.
+
+## Runtime network access
+
+Both launchers use an application container with loopback networking only.
+HTTPS clients use a local relay to a separate gateway that permits exact provider
+and Cargo registry destinations. Direct internet, DNS, host/LAN and sibling-service
+connections are unavailable. Local development servers still work on loopback.
+See [the runtime network policy](egress/README.md) for the allowlist, authentication
+steps, limitations, and Docker-host acceptance tests. Rebuild both images after a
+reviewed policy update; do not enable unrestricted networking for troubleshooting.

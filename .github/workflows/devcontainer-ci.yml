@@ -38,6 +38,7 @@ jobs:
           python3 -I .devcontainer/test-start.py
           python3 -I .devcontainer/test-vscode.py
           python3 -I .devcontainer/test-publishing.py
+          python3 -I .devcontainer/egress/test_proxy.py
 
       - name: Entry-point configuration checks
         run: python3 -I .devcontainer/test-runtime-config.py

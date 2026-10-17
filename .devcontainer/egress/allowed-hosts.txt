@@ -1,0 +1,9 @@
+# Exact CONNECT destinations on port 443; see .devcontainer/egress/README.md.
+api.anthropic.com
+claude.ai
+platform.claude.com
+api.openai.com
+auth.openai.com
+chatgpt.com
+index.crates.io
+static.crates.io
