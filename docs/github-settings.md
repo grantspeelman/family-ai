@@ -64,8 +64,8 @@ Record it:
 
 | Setting | Turned on by | Date |
 | --- | --- | --- |
-| Secret scanning | | |
-| Push protection | | |
+| Secret scanning | Owner (confirmed enabled in repo settings) | 2026-10-17 |
+| Push protection | Owner (confirmed enabled in repo settings) | 2026-10-17 |
 
 ### If a secret leaks
 
