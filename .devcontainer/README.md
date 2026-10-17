@@ -138,6 +138,8 @@ itself, using a throwaway Claude config volume so your login is never touched.
 CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test, the
 smoke test and every tracked `*.bats` file on every push to `main` and every PR.
 
+Besides `token-file-check.bats`, `start.bats`, `post-start.bats` and `entrypoint.bats` test the
+scripts here, and `.lefthook/placeholder.bats` the hook helper, with shimmed commands.
 `token-file-check.bats` tests the token-file mode check in `start.sh` with dummy
 files in temp dirs (including symlinks). It needs no Docker: run it with
 `bats .devcontainer/token-file-check.bats`. CI finds and runs it, and any other
