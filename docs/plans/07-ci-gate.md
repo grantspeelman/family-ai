@@ -1,4 +1,4 @@
-# 07 — CI full-suite gate
+# 07 — CI gate
 
 **Status:** in progress
 
@@ -8,7 +8,7 @@ One required check, `ci`, that is green only if every CI job is green. A PR cann
 
 "The full test suite" means every test and lint job that exists in CI. Each stack PR adds its own job and wires it into `ci`'s `needs:` in the same PR (for example cargo test and clippy arrive with PR 1, the registry app's tests with PR 6). The pre-commit hook is only a fast local check on changed files; CI is the check that counts.
 
-Today there is no application code. What the gate covers is the container checks (compose validation, image build, structure test, smoke test) and the full-history secret scan, plus workflow safety and the bats tests once those PRs merge. Nothing covers a whole source tree yet, because there is none.
+Today there is no application code. What the gate covers is the container checks (compose validation, image build, structure test, smoke test) and the full-history secret scan. Later PRs add jobs and wire them into `ci`. Nothing covers a whole source tree yet, because there is none.
 
 ## Builds on
 

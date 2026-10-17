@@ -76,10 +76,10 @@ jobs:
 
   # The single required status check. Branch protection requires this job's name
   # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
-  # a job added to that list is gated. `if: always()` makes it run
-  # even when a needed job failed; without it a failed job would leave this one
-  # skipped, and GitHub treats a skipped required check as passing. Anything other
-  # than `success` (failed, cancelled, skipped) fails it.
+  # a job is gated once it is in that list. `if: always()` makes this job run even
+  # when a needed job failed; without it a failed job would leave this one skipped,
+  # and GitHub can treat a skipped required check as passing. Anything other than
+  # `success` (failed, cancelled, skipped) fails it, and so does an empty list.
   ci:
     name: ci
     if: always()
@@ -100,7 +100,7 @@ jobs:
             echo "| --- | --- |"
             jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"$NEEDS"
           } | tee -a "$GITHUB_STEP_SUMMARY"
-          if ! jq -e 'all(.[]; .result == "success")' <<<"$NEEDS" >/dev/null; then
+          if ! jq -e 'length > 0 and all(.[]; .result == "success")' <<<"$NEEDS" >/dev/null; then
             echo "A needed job did not succeed." >&2
             exit 1
           fi
