@@ -81,7 +81,8 @@ RUN set -eux; \
       "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GITLEAKS_ARCH}.tar.gz" \
       -o /tmp/gitleaks.tar.gz; \
     echo "${SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -; \
-    tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks; \
+    tar --no-same-owner -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks; \
+    chmod 755 /usr/local/bin/gitleaks; \
     rm /tmp/gitleaks.tar.gz; \
     gitleaks version
 
