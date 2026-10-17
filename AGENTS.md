@@ -1,8 +1,16 @@
 # AGENTS.md
 
-Entry point for coding agents (Claude Code and others). Read it in full before changing anything. `CLAUDE.md` points here.
+Entry point for coding agents (Claude Code and others). Read it in full before changing anything.
 
-family-ai is a public repo (AGPL-3.0). The one non-negotiable rule is in `CLAUDE.md`: anything others can see on GitHub is public (PR titles and descriptions, commit messages, issues, comments, code, docs). Keep security concerns about the local environment out of all of it. Examples: credentials found on disk, how the dev container is set up or exposed, weaknesses in local tooling or config. Report such concerns to the user in the session instead and let them decide what to publish. Read `CLAUDE.md` before writing any PR text or commit message.
+family-ai is a public repo (AGPL-3.0). There is no `CLAUDE.md`; this file is the single entry point.
+
+## Public repo: keep security concerns private
+
+This is the one non-negotiable rule. Read it before writing any PR text or commit message.
+
+Anything in a PR title or description, commit message, issue, comment, code, docs or any other place on GitHub that others can see is public.
+
+Do not put security concerns about the local environment there. That includes credentials or tokens found on disk, how the dev container is set up or exposed, and weaknesses in local tooling or config. Tell the user in the session instead and let them decide what, if anything, to publish.
 
 ## Where things are
 
