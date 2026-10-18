@@ -20,8 +20,8 @@ services:
     read_only: true
     # Writable disposable caches/editor state; only selected provider state persists.
     tmpfs:
-      - /tmp:rw,nosuid,nodev,size=2g,mode=1777
-      - /home/vscode:rw,nosuid,nodev,size=2g,uid=${USER_UID:-1000},gid=${USER_GID:-1000},mode=700
+      - /tmp:rw,exec,nosuid,nodev,size=2g,mode=1777
+      - /home/vscode:rw,exec,nosuid,nodev,size=2g,uid=${USER_UID:-1000},gid=${USER_GID:-1000},mode=700
     user: vscode
     labels:
       org.family-ai.session: ${WORKSPACE_SOURCE:?Use an installed trusted host session}

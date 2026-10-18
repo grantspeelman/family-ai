@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 
 subprocess.run(['python3', '-I', '/usr/local/lib/agent-policy.py'], check=True)
@@ -25,6 +26,13 @@ for directory in ('/workspace', '/tmp', '/home/vscode'):
         marker = Path(temp) / 'routine-edit'
         marker.write_text('dummy-edit')
         assert marker.read_text() == 'dummy-edit'
+        # Temporary builds and the remote editor install executable binaries in
+        # these writable directories; opening a script through bash would hide
+        # a noexec mount, so execute a copied harmless ELF binary directly.
+        executable = Path(temp) / 'routine-executable'
+        shutil.copyfile('/bin/true', executable)
+        executable.chmod(0o700)
+        subprocess.run([str(executable)], check=True)
 # No user login, hooks, provider environment or model request is used.
 with tempfile.TemporaryDirectory() as temp:
     env = {'PATH': os.environ['PATH'], 'HOME': temp, 'CODEX_HOME': temp,

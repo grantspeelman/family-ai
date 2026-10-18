@@ -396,7 +396,10 @@ boundary from the outset.
 The app root filesystem is read-only. Writes go to disposable `/workspace`,
 `/home/vscode` (caches and editor state), `/tmp`, and the selected provider state
 mount. The home and temporary filesystems have bounded sizes and do not survive
-container recreation. The installed launch controls and system policy files are
+container recreation. These writable development paths allow execution, as the
+workspace already does, so temporary builds and remote editor binaries work.
+The home and temporary mounts retain `nosuid` and `nodev`; execution does not
+grant additional privileges. The installed launch controls and system policy files are
 read-only. Network access stays restricted by the separate gateway, regardless
 of proxy variables, CLI flags or project settings. Non-root identity, no added
 privileges and dropped capabilities apply to every process.

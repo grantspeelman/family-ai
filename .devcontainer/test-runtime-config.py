@@ -86,7 +86,12 @@ class RuntimeConfigTests(unittest.TestCase):
                 self.assertNotIn("ports", gateway)
                 self.assertTrue(app["read_only"])
                 self.assertEqual(len(app["tmpfs"]), 2)
-                self.assertTrue(any(item.startswith("/home/vscode:") for item in app["tmpfs"]))
+                self.assertEqual({item.split(":", 1)[0] for item in app["tmpfs"]},
+                                 {"/tmp", "/home/vscode"})
+                for mount in app["tmpfs"]:
+                    options = set(mount.split(":", 1)[1].split(","))
+                    self.assertTrue({"exec", "nosuid", "nodev"} <= options, mount)
+                    self.assertNotIn("noexec", options)
                 self.assertFalse(app.get("privileged", False))
                 self.assertFalse(app.get("devices"))
                 self.assertFalse(app.get("device_cgroup_rules"))
