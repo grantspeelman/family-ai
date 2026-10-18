@@ -32,7 +32,7 @@ Every bash script in the repo that can be exercised without Docker, a network or
 - [x] The CI discovery logic (mapfile, zero-files guard, `./` prefix) finds all five files when run locally.
 - [x] Tests leave nothing outside `BATS_TEST_TMPDIR` (`git status` and the real `HOME` unchanged by a run).
 - [x] Total runtime is under 30 seconds.
-- [x] `bash -n` passes on the scripts, and `python3 -I .github/scripts/check-workflow-rules.py` passes.
+- [x] `bash -n` passes on the scripts, and the workflow safety check (now actionlint and zizmor; see plan 17) passes.
 - [x] `docs/conventions.md` lists the covered scripts and the `smoke-test.sh` exception.
 - [ ] The Bats step runs green on the PR with the new files. Unticked: needs a real CI run (no Docker daemon here).
 

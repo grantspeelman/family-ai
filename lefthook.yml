@@ -7,8 +7,8 @@
 #
 # Steps marked PLACEHOLDER call .lefthook/placeholder.sh, which prints that no
 # check ran. Until PR 2 and PR 7 add their globs, only .rs and Cargo.* files are
-# covered by these steps; any other file type is checked by the secret scan only
-# and is skipped by the other steps without output. {staged_files} covers
+# covered by the placeholders; workflows have real lint steps below. Other types
+# are checked by the secret scan only and skipped by other steps. {staged_files} covers
 # added, copied, modified and renamed files; deleted files are not passed.
 # To add a language's checks, see docs/conventions.md.
 pre-commit:
@@ -36,3 +36,12 @@ pre-commit:
     5-cargo-deny:
       glob: "{Cargo.toml,Cargo.lock,**/Cargo.toml,**/Cargo.lock}"
       run: .lefthook/placeholder.sh cargo-deny "PR 7" {staged_files}
+
+    6-actionlint:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint {staged_files}
+
+    7-zizmor:
+      glob: ".github/workflows/*.{yml,yaml}"
+      # Offline checks are fast, deterministic and need no GitHub token.
+      run: zizmor --offline --persona=pedantic {staged_files}

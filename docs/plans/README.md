@@ -42,5 +42,6 @@ One plan per PR. Each plan is a single idea that lands as its own PR, and each b
 | 14 | [bats-core](14-bats-core.md) | Skim |
 | 15 | [bats in CI](15-bats-ci.md) | Skim |
 | 16 | [bats tests for bash scripts](16-bats-script-tests.md) | Skim |
+| 17 | [Workflow linters in CI and pre-commit](17-workflow-linters.md) | Close read |
 
 The AGPL-3.0 `LICENSE` is already committed and has no plan.

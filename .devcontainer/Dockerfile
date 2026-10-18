@@ -1,6 +1,6 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
 # Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; gh, gitleaks,
-# lefthook and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
+# lefthook, actionlint, zizmor and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
 FROM ubuntu:26.04
 
 # pipefail so `curl | tar` and friends fail loudly on a broken download.
@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rust-clippy \
     rustc \
     rustfmt \
+    shellcheck \
     socat \
     sqlite3 \
     sudo \
@@ -110,6 +111,46 @@ RUN set -eux; \
     echo "${SHA256}  /usr/local/bin/lefthook" | sha256sum -c -; \
     chmod +x /usr/local/bin/lefthook; \
     lefthook version
+
+# actionlint: workflow checks in CI and on staged workflows before commits.
+ARG ACTIONLINT_VERSION=1.7.12
+ENV ACTIONLINT_SHA256_AMD64=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+ENV ACTIONLINT_SHA256_ARM64=325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) TOOL_ARCH=amd64; SHA256="${ACTIONLINT_SHA256_AMD64}" ;; \
+      arm64) TOOL_ARCH=arm64; SHA256="${ACTIONLINT_SHA256_ARM64}" ;; \
+      *) echo "Unsupported arch: $(dpkg --print-architecture)"; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${TOOL_ARCH}.tar.gz" \
+      -o /tmp/actionlint.tar.gz; \
+    echo "${SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c -; \
+    mkdir /tmp/actionlint-src; \
+    tar -xzf /tmp/actionlint.tar.gz -C /tmp/actionlint-src actionlint; \
+    install -m755 /tmp/actionlint-src/actionlint /usr/local/bin/actionlint; \
+    rm -rf /tmp/actionlint.tar.gz /tmp/actionlint-src; \
+    actionlint -version
+
+# zizmor: workflow checks in CI and on staged workflows before commits.
+ARG ZIZMOR_VERSION=1.31.1
+ENV ZIZMOR_SHA256_AMD64=d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99
+ENV ZIZMOR_SHA256_ARM64=37eebbd5762a44f262d94875431b14a6d2402991e90a685113ea97b8b41be833
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) TOOL_ARCH=x86_64; SHA256="${ZIZMOR_SHA256_AMD64}" ;; \
+      arm64) TOOL_ARCH=aarch64; SHA256="${ZIZMOR_SHA256_ARM64}" ;; \
+      *) echo "Unsupported arch: $(dpkg --print-architecture)"; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/zizmor-${TOOL_ARCH}-unknown-linux-gnu.tar.gz" \
+      -o /tmp/zizmor.tar.gz; \
+    echo "${SHA256}  /tmp/zizmor.tar.gz" | sha256sum -c -; \
+    mkdir /tmp/zizmor-src; \
+    tar -xzf /tmp/zizmor.tar.gz -C /tmp/zizmor-src zizmor; \
+    install -m755 /tmp/zizmor-src/zizmor /usr/local/bin/zizmor; \
+    rm -rf /tmp/zizmor.tar.gz /tmp/zizmor-src; \
+    zizmor --version
 
 # bats-core: test runner for bash scripts. Released as a source tarball only (no
 # release assets), so this is GitHub's archive of the v${BATS_VERSION} tag. It is

@@ -6,16 +6,16 @@ Standing rules for every PR in this build. `AGENTS.md` is the entry point and co
 
 ## What is enforced today
 
-Only the secret scan (gitleaks) is a real check today. The pre-commit hook runs it, but only inside the dev container; CI scans the full history on every PR and push to main. The hook also carries placeholder steps for the checks below, which run on matching changed files and check nothing until the tools are installed. Everything else here is a convention that people and agents follow by hand until the tooling lands:
+The pre-commit hook runs gitleaks on staged changes and actionlint plus zizmor on staged workflow files. CI scans the full history for secrets and checks all workflows on every PR and push to main. The hook also carries placeholder application checks that check nothing until their tools are installed.
 
-Coverage gap: Until PR 2 and PR 7 add their globs, these steps cover only `.rs` and `Cargo.*` files. Files of any other type, including the registry app's, are checked by the secret scan only, and are skipped by the other steps without any output.
+Coverage gap: Until PR 2 and PR 7 install the application checks and add their globs, only workflows have real changed-files lint checks. Other files are checked by the secret scan; `.rs` and `Cargo.*` files also run the placeholders.
 
 | Rule | Enforced by | Status |
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
 | Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
-| Workflow safety rules (below) | CI (`workflows` job: `actionlint` and `.github/scripts/check-workflow-rules.py`) | Workflow in place (plan 08). Checks syntax, untrusted input in `run:`, SHA pins, `persist-credentials`, `secrets.`, `pull_request_target` / `workflow_run` and read-only top-level permissions. Judgement rules (per-job write permissions, a reason for each) are for the reviewer. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Workflow safety rules (below) | Pre-commit hook and CI (`workflows` job): actionlint and zizmor | Enforced for staged workflows locally and all workflows in CI. Automated coverage and remaining reviewer checks are listed below. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Bash script tests (`*.bats`) | CI (`image` job, step "Bats tests", inside the `ci` gate) | Workflow in place (plan 15). Finds every tracked `*.bats` file with `git ls-files` and runs them in the built image; fails if none are found. Not run by the pre-commit hook |
 | Dependabot version updates | `.github/dependabot.yml` | Config in place (plan 10) for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
 | CodeQL analysis | GitHub code scanning, default setup (a repo setting, no workflow file) | On (plan 11), analysing `actions` and `python` on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:`. Owner's setting: [docs/github-settings.md](github-settings.md#code-scanning-codeql) |
@@ -50,7 +50,7 @@ Covered today: `.devcontainer/start.sh`, `postStartCommand.sh`, `entrypoint.sh`,
 Anyone can open a PR against this public repo, so no workflow may run untrusted code with secrets or write access available. Every workflow in `.github/workflows/` follows these rules. A new or changed workflow is checked against them in review, and the `workflows` CI job checks the mechanical ones.
 
 1. **Read-only by default.** Set `permissions: contents: read` at the top of the workflow. Anything broader is set on the one job that needs it, with a comment giving the reason.
-2. **No `pull_request_target` or `workflow_run`** that checks out or runs fork code. The check script is stricter and bans both triggers outright, so adding one needs a deliberate change to the script and a written reason. Today no workflow uses either; use plain `pull_request`, which gives fork PRs a read-only token and no secrets.
+2. **No `pull_request_target` or `workflow_run`** that checks out or runs fork code. zizmor checks dangerous trigger patterns; a reviewer still checks that no fork code runs with elevated access. Today no workflow uses either; use plain `pull_request`, which gives fork PRs a read-only token and no secrets.
 3. **Fork PRs get no secrets, so workflows must not need any.** No `secrets.` reference in a workflow unless a reviewer has agreed it is safe and the reason is written next to it.
 4. **No real Fly token or API key in GitHub Actions.** CI runs against the Fly mock.
 5. **Untrusted input never goes straight into `run:`.** PR titles, branch names, issue text and anything else under a contributor's control (`github.head_ref`, `github.event.*`) is passed through `env:` and read as a shell variable. No `${{ }}` expression inside a `run:` script.
@@ -58,7 +58,13 @@ Anyone can open a PR against this public repo, so no workflow may run untrusted 
 7. **`persist-credentials: false` on checkout** unless the job must push.
 8. **Every job has `timeout-minutes`.**
 
-The `workflows` job checks part of rules 1 to 3 and 5 to 8, plus `actionlint`'s own syntax and expression checks: top-level permissions are present and not `write`; no `pull_request_target`, `workflow_run` or `secrets` reference; no `${{ }}` in a `run:` block; every `uses:` is SHA-pinned with a version comment; every checkout sets `persist-credentials: false`; every job has `timeout-minutes`. Reviewers still check: per-job permissions and their reasons, rule 4 (an API key can hide in a plain value, not just `secrets.`), the checksums of downloaded binaries, and anything the script cannot see. The script is a line-based text check, not a YAML parser, so a pass is not proof. Known limits: flow-style YAML (other than `permissions: {}`), anchors and aliases, untrusted input outside `run:` (such as an `actions/github-script` script), and `uses:` text inside `run:` blocks are not covered. The full list is in the script's docstring. Run both checks locally with `actionlint` and `python3 -I .github/scripts/check-workflow-rules.py` from the repo root. The audit of each existing workflow against these rules is in [docs/plans/08-workflow-safety.md](plans/08-workflow-safety.md).
+The `workflows` job runs actionlint for syntax, expressions and shellcheck checks, then `zizmor --offline --persona=pedantic .github/workflows/` for YAML-aware security analysis. The pre-commit hook uses the same tools and audit options, passing only staged workflow filenames. Both `.yml` and `.yaml` are covered. CI remains the merge gate through `ci`'s `needs:`; local hooks give earlier feedback.
+
+zizmor checks action SHA pins (including first-party actions), checkout credential persistence, excessive permissions, dangerous triggers and template injection, including input outside shell `run:` blocks. The pedantic persona also checks missing version comments. YAML structure is parsed rather than matched as lines. Both tools are pinned by version and SHA-256 in CI and the dev container. Offline auditing needs no token or network and skips online-only checks such as whether an action is archived or a pinned commit belongs to its upstream repository. No audits are ignored today; any future ignore needs a written reason.
+
+Reviewers still check the exact read-only permission default and reasons for broader per-job permissions, the absence of unnecessary secrets and plain API keys, all expressions in `run:` (the convention bans even trusted expressions), job timeouts, action version comments and downloaded binary checksums. zizmor does not enforce every repository-specific rule or prove that a workflow is safe.
+
+Run `actionlint` and `zizmor --offline --persona=pedantic .github/workflows/` from the repo root. The tools are installed by a rebuilt dev container. `bats .lefthook/workflows.bats` tests lint failures and actual commit rejection in disposable repositories, including unrelated-file skips. The workflow audit is in [plan 08](plans/08-workflow-safety.md); the replacement and hook checklist is in [plan 17](plans/17-workflow-linters.md).
 
 Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.md](github-settings.md).
 
@@ -76,11 +82,11 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 **How it fits this repo's conventions**
 
 - Actions are pinned by full commit SHA with a trailing `# vX.Y.Z` comment (workflow safety rule 6). Dependabot reads that form and updates the SHA and the comment together, as long as the comment is on the same line. Keep that format or updates stop applying cleanly.
-- Dependabot PRs run the `ci` workflow as fork-like runs: a read-only `GITHUB_TOKEN` and no Actions secrets (GitHub's docs: [troubleshooting Dependabot on GitHub Actions](https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions), checked 2026-10-14). No workflow here uses a secret (rule 3; the `workflows` job fails on any `secrets` reference) and the top-level permission is `contents: read`, so they run unchanged. This holds for every Dependabot-triggered `push`, `pull_request` and `schedule` run, not just PRs. Dependabot secrets are a separate store that this repo does not use, so nothing here should reach for `secrets.` in a Dependabot-triggered job.
+- Dependabot PRs run the `ci` workflow as fork-like runs: a read-only `GITHUB_TOKEN` and no Actions secrets (GitHub's docs: [troubleshooting Dependabot on GitHub Actions](https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions), checked 2026-10-14). No workflow here uses a secret (rule 3; reviewers check references and their reasons) and the top-level permission is `contents: read`, so they run unchanged. This holds for every Dependabot-triggered `push`, `pull_request` and `schedule` run, not just PRs. Dependabot secrets are a separate store that this repo does not use, so nothing here should reach for `secrets.` in a Dependabot-triggered job.
 - The `docker` entry only covers the `FROM` line. Dependabot does not touch the version and SHA-256 pins in `ARG` and `ENV` lines, or in workflow `env:`. These stay **manually maintained**, so nobody should assume they are covered:
-  - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, `BATS_VERSION` and `BATS_SHA256`, in `.devcontainer/Dockerfile`.
+  - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, `BATS_VERSION` and `BATS_SHA256`, plus `ACTIONLINT_VERSION` and `ZIZMOR_VERSION` and their architecture-specific checksums, in `.devcontainer/Dockerfile`.
   - `CST_VERSION` and `CST_SHA256` in the `image` job of `.github/workflows/devcontainer-ci.yml`.
-  - `ACTIONLINT_VERSION` and `ACTIONLINT_SHA256` in the `workflows` job of the same file.
+  - `ACTIONLINT_VERSION`, `ACTIONLINT_SHA256`, `ZIZMOR_VERSION` and `ZIZMOR_SHA256` in the `workflows` job of the same file.
   - Packages installed from the Ubuntu archive follow the base image and are not pinned.
 
   When bumping one by hand, take the new SHA-256 from the project's published checksums (workflow safety rule 6). There is no automation for this yet.
@@ -94,8 +100,9 @@ CodeQL runs through GitHub's **default setup**, a repo setting, not a workflow i
 - on pull requests against the default branch, except pull requests from forks;
 - weekly, as long as a push or pull request has triggered a scan in the last 180 days.
 
-It picks its own languages. On `main` today it runs `Analyze (actions)` for the workflows and `Analyze (python)` for `.github/scripts/check-workflow-rules.py`. GitHub's permissions and action versions apply, not ours, so the [workflow safety](#workflow-safety) rules do not cover it.
+It picks its own languages. Actions analysis covers workflows; Python analysis covers tracked Python code. The detected languages can change as files are added or removed. GitHub's permissions and action versions apply, not ours, so the [workflow safety](#workflow-safety) rules do not cover it.
 
+- **Keep Actions analysis alongside zizmor.** zizmor gives fast local feedback and gates workflow changes in CI. CodeQL remains a complementary analysis with its own queries and code-scanning results; the overlap in injection checks does not require removing either tool.
 - **Not a gate yet.** CodeQL is not a required check and is not in the `ci` job's `needs:`. Decide that once there is real code and a sense of its noise.
 - **When to switch to a workflow (advanced setup).** Switch when we need something default setup cannot give: custom queries, a real build for a compiled language, or a CodeQL check we control and can make required. That PR adds the workflow under the workflow safety rules and switches default setup off first, because GitHub rejects advanced-setup uploads while default setup is on.
 
