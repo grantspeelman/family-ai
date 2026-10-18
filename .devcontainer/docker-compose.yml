@@ -13,6 +13,7 @@ services:
     volumes:
       - ..:/workspace:cached
       - claude-config:/home/vscode/.claude
+      - codex-config:/home/vscode/.codex
     # GH_TOKEN comes from a file on the host, outside the repo (see README,
     # "GitHub token"). A missing file is fine: gh is then unauthenticated.
     env_file:
@@ -24,3 +25,7 @@ volumes:
   # repo — VS Code's and start.sh's, across checkouts and rebuilds.
   claude-config:
     name: family-ai-claude-config
+
+  # Same for the Codex login.
+  codex-config:
+    name: family-ai-codex-config

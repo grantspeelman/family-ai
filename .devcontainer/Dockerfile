@@ -12,7 +12,7 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 
 # From the Ubuntu archive:
-#   • nodejs/npm (Node 22): only needed to install and run Claude Code.
+#   • nodejs/npm (Node 22): only needed to install and run Claude Code and Codex.
 #   • python3: for the ad-hoc scripts Claude writes and runs.
 #   • rustc/cargo/rustfmt/rust-clippy (Rust 1.93): the toolchain for the registry and
 #     family apps. build-essential gives cargo a linker and C compiler, and
@@ -141,6 +141,11 @@ RUN npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force
 ENV DISABLE_AUTOUPDATER=1
 
+# Codex CLI floats to latest for the same reason; rebuild to upgrade.
+# hadolint ignore=DL3016
+RUN npm install -g @openai/codex \
+    && npm cache clean --force
+
 # Pin GitHub's SSH host keys (from https://api.github.com/meta) so the first
 # `git push` neither prompts nor trusts whatever answers on port 22.
 COPY .devcontainer/ssh_known_hosts /etc/ssh/ssh_known_hosts
@@ -174,9 +179,11 @@ RUN set -eux; \
 # Claude's config dir is a named volume (see docker-compose.yml) so the login
 # survives rebuilds. Creating it here, vscode-owned, means Docker seeds a fresh
 # volume with that ownership instead of root's.
+# Codex's config dir (CODEX_HOME) is a volume for the same reason.
 ENV CLAUDE_CONFIG_DIR=/home/vscode/.claude
-RUN mkdir -p /workspace "${CLAUDE_CONFIG_DIR}" && \
-    chown vscode:vscode /workspace "${CLAUDE_CONFIG_DIR}"
+ENV CODEX_HOME=/home/vscode/.codex
+RUN mkdir -p /workspace "${CLAUDE_CONFIG_DIR}" "${CODEX_HOME}" && \
+    chown vscode:vscode /workspace "${CLAUDE_CONFIG_DIR}" "${CODEX_HOME}"
 WORKDIR /workspace
 
 COPY .devcontainer/entrypoint.sh /entrypoint.sh

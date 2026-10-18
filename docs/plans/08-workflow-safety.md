@@ -8,7 +8,7 @@ Anyone can open a PR against a public repo, so no workflow runs untrusted code w
 
 ## Builds on
 
-- 07 — CI full-suite gate (there are now workflows to audit)
+- 07 — CI gate (there are now workflows to audit)
 
 ## In scope
 
