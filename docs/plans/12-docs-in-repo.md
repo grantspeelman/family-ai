@@ -29,7 +29,8 @@ What the public repo says about the project is a deliberate choice. Architecture
 | `first-build-pr-sequence.md` | Committed (already in history since its first commit), one line updated | Build sequence, working principles and licensing notes only; no pricing, positioning, customer or competitor names, or personal data. The line on Dependabot and CodeQL was stale after plans 10 and 11 and now points to `docs/github-settings.md`. |
 | Architecture doc it refers to | Not in the repo or working tree, so no decision to make | Searched the repo, all branches and the filesystem by name; nothing found. The sequence doc still mentions it; it is not committed. If it is added later it is read against the rule first. |
 | `docs/` (conventions, github-settings, plans) | Committed | Engineering docs; read against the rule. |
-| `AGENTS.md`, `CLAUDE.md` | Committed | Engineering and agent instructions. |
+| `AGENTS.md` | Committed | Engineering and agent instructions. |
+| `.devcontainer/README.md` | Committed | How to start and use the dev container; engineering doc, read against the rule. |
 
 ## Acceptance checklist
 
