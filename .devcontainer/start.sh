@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build, start and attach to the dev container from a plain terminal.
 # -h, --help prints the usage line and the flag lines below.
-#   --rebuild  rebuild the image from scratch (also how Claude Code gets upgraded)
+#   --rebuild  git pull --ff-only, then rebuild the image from scratch (also how Claude Code gets upgraded)
 #   --docker   privileged mode with nested Docker; see compose.docker.yml first
 #   --claude   run Claude Code directly instead of a shell (tells herdr it's an agent)
 #   --codex    run Codex directly instead of a shell (tells herdr it's an agent)
@@ -122,6 +122,14 @@ fi
 
 # ── Build and start ──────────────────────────────────────────────────────────
 if [ "$rebuild" = true ]; then
+    # The image is built from this checkout, so bring it up to date first: a
+    # stale checkout would silently rebuild an old image. Runs after the
+    # ssh-agent setup above, so an SSH remote can authenticate.
+    echo -e "${GREEN}Updating the checkout (git pull --ff-only)...${NC}"
+    if ! git -C "$PROJECT_ROOT" pull --ff-only; then
+        echo -e "${RED}git pull --ff-only failed, so nothing was rebuilt. Fix what git reported and rerun.${NC}" >&2
+        exit 1
+    fi
     echo -e "${GREEN}Rebuilding the image from scratch...${NC}"
     "${COMPOSE[@]}" build --pull --no-cache
     "${COMPOSE[@]}" up --detach --force-recreate

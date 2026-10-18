@@ -11,7 +11,7 @@ container keeps running after you exit.
 
 | Flag        | Effect |
 |-------------|--------|
-| `--rebuild` | Rebuild the image from scratch. This is also how Claude Code and Codex get upgraded. |
+| `--rebuild` | Run `git pull --ff-only` on the checked-out branch, then rebuild the image from scratch. The image is built from this checkout, so the pull keeps it current; if the pull fails, nothing is rebuilt. This is also how Claude Code and Codex get upgraded. |
 | `--claude`  | Run Claude Code directly instead of a shell. Sets `HERDR_AGENT` so [herdr](https://herdr.dev) sees the agent. |
 | `--codex`   | Same, for Codex. |
 | `--docker`  | Privileged mode with nested Docker. Read [Nested Docker](#nested-docker) first. |
