@@ -150,8 +150,10 @@ hook, nested Docker, and switching back to unprivileged. It needs network access
 (it pulls `hello-world`). It runs in about 30 seconds and cleans up after
 itself, using a throwaway Claude config volume so your login is never touched.
 
-CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test and
-the smoke test on every push to `main` and every PR.
+CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test, the
+smoke test and every tracked `*.bats` file on every push to `main` and every PR.
 
-`token-file-check-test.sh` tests the token-file mode check in `start.sh` with dummy
-files in temp dirs (including symlinks). It needs no Docker, and CI does not run it.
+`token-file-check.bats` tests the token-file mode check in `start.sh` with dummy
+files in temp dirs (including symlinks). It needs no Docker: run it with
+`bats .devcontainer/token-file-check.bats`. CI finds and runs it, and any other
+tracked `*.bats` file, automatically.

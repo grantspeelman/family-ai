@@ -50,6 +50,26 @@ jobs:
       - name: Structure test
         run: container-structure-test test --image "$IMAGE" --config .devcontainer/container-structure-test.yaml
 
+      # Every tracked *.bats file, found by git, run in one bats invocation inside
+      # the image just built, so the tests use the same pinned bats-core as the dev
+      # container (Dockerfile BATS_VERSION and BATS_SHA256 are the only pin). A new
+      # test file needs no change here. Zero files is a failure: the repo has at
+      # least one, so zero means discovery broke, not that there is nothing to test.
+      - name: Bats tests (every tracked *.bats)
+        run: |
+          mapfile -d '' bats_files < <(git ls-files -z -- '*.bats')
+          if [ "${#bats_files[@]}" -eq 0 ]; then
+            echo "no .bats files found, or git ls-files failed" >&2
+            exit 1
+          fi
+          # A leading ./ keeps a name that starts with - from being read as a bats option.
+          bats_files=("${bats_files[@]/#/./}")
+          printf 'Running %d bats file(s):\n' "${#bats_files[@]}"
+          printf '  %s\n' "${bats_files[@]}"
+          docker run --rm --entrypoint bats --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            "${bats_files[@]}"
+
       # Backstop for commits made outside the container, where the lefthook
       # pre-commit hook does not run.
       - name: Secret scan (full history)
