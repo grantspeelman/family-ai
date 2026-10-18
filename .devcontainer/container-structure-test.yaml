@@ -6,7 +6,7 @@
 # Image design:
 #   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite, gosu and Docker come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
-#     gh, gitleaks, lefthook and bats-core are pinned, checksummed downloads, pinned exactly.
+#     gh, gitleaks, lefthook, actionlint, zizmor and bats-core are pinned, checksummed downloads, pinned exactly.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
 #   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
@@ -128,6 +128,21 @@ commandTests:
     command: lefthook
     args: ["version"]
     expectedOutput: ['2\.1\.15']
+
+  - name: actionlint is 1.7.12 (ACTIONLINT_VERSION)
+    command: actionlint
+    args: ["-version"]
+    expectedOutput: ['^1\.7\.12']
+
+  - name: zizmor is 1.31.1 (ZIZMOR_VERSION)
+    command: zizmor
+    args: ["--version"]
+    expectedOutput: ['^zizmor 1\.31\.1']
+
+  - name: shellcheck installed (actionlint shell checks)
+    command: shellcheck
+    args: ["--version"]
+    exitCode: 0
 
   - name: bats is 1.14.0 (BATS_VERSION)
     command: bats

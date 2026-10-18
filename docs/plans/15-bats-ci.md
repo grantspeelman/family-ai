@@ -30,7 +30,7 @@ CI finds and runs every `*.bats` file in the repo by itself. Adding a bash test 
 - [x] Discovery: the exact `git ls-files` command from the workflow, run against the repo, lists every `.bats` file (today one) and the file-list array handles paths with spaces (null-separated) and names starting with `-` (`./` prefix); checked locally with a temp `-dash.bats` and a nested file with spaces, removed afterwards.
 - [x] `.devcontainer/token-file-check.bats` passes locally under bats-core 1.14.0 installed from the pinned tarball (SHA-256 verified), 8 of 8.
 - [x] A deliberately failing assertion makes bats exit non-zero; shown once, then reverted.
-- [x] `python3 -I .github/scripts/check-workflow-rules.py` passes; the step uses no `${{ }}` in `run:`, no secrets, and adds no action, so the pin rules are unchanged.
+- [x] The workflow safety check (now actionlint and zizmor; see plan 17) passes; the step uses no `${{ }}` in `run:`, no secrets, and adds no action, so the pin rules are unchanged.
 - [x] No workflow change is needed to add a new test: a second `.bats` file under any directory is picked up by the same command (checked locally with a temporary file, removed).
 - [ ] The step runs green on the PR. Unticked: needs a real CI run (no Docker daemon here).
 - [ ] A deliberately failing `.bats` test turns the `ci` job red. Unticked: needs a real CI run.
