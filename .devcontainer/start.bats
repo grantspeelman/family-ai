@@ -176,7 +176,7 @@ HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude|--codex | -- command
     start -- ls -h
     [ "$status" -eq 0 ]
     last_argv
-    [ "${LAST[-1]}" = -h ]
+    [ "${LAST[*]: -3}" = "app ls -h" ]
 }
 
 @test "an unknown flag after a valid one is still rejected" {

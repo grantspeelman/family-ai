@@ -9,10 +9,11 @@
 set -euo pipefail
 
 # The usage line plus the flag lines of the header comment above: one source.
+# The scan stops at the first `set -` line, so later comments never leak in.
 usage_line() { echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex | -- command [args...]]"; }
 print_help() {
     usage_line
-    sed -n '/^#   -/{s/^# //;p;}' "${BASH_SOURCE[0]}"
+    sed -n '/^set -/q;/^#   -/{s/^# //;p;}' "${BASH_SOURCE[0]}"
 }
 
 GREEN='\033[0;32m'

@@ -22,7 +22,7 @@ The command-launch behaviour of `start.sh` (`--`, `--claude`, `--codex`) is test
 - The docker shim also records the last call's argv (NUL-separated, so empty arguments survive) and the `HERDR_AGENT` it saw.
 - `.devcontainer/test-start.py` is deleted.
 - `start.sh -h` / `--help`: prints the usage line and the flag lines to stdout and exits 0. It is handled while parsing arguments, so it runs no Docker, `ssh-add` or `ssh-agent` and does no token-file check. It works combined with other flags. After `--`, `-h` and `--help` are ordinary command arguments. Unknown flags still print the usage line to stderr and exit 64.
-- One source for the flag text: the help prints the flag lines of the header comment in `start.sh`, so they cannot drift.
+- One source for the flag text: the help prints the flag lines of the header comment in `start.sh`, so they cannot drift. The scan stops at `set -euo pipefail`, so later comments never leak in. The script header is the single source; the copy in `start.bats` is an intentional drift check.
 - The old test "--help is not a flag" is replaced by the help tests. `.devcontainer/README.md` mentions `--help`.
 
 ## Out of scope
