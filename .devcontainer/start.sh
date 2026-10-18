@@ -1,11 +1,20 @@
 #!/bin/bash
 # Build, start and attach to the dev container from a plain terminal.
+# -h, --help prints the usage line and the flag lines below.
 #   --rebuild  rebuild the image from scratch (also how Claude Code gets upgraded)
 #   --docker   privileged mode with nested Docker; see compose.docker.yml first
 #   --claude   run Claude Code directly instead of a shell (tells herdr it's an agent)
 #   --codex    run Codex directly instead of a shell (tells herdr it's an agent)
 #   -- command [args...]  run the given command inside the container
 set -euo pipefail
+
+# The usage line plus the flag lines of the header comment above: one source.
+# The scan stops at the first `set -` line, so later comments never leak in.
+usage_line() { echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex | -- command [args...]]"; }
+print_help() {
+    usage_line
+    sed -n '/^set -/q;/^#   -/{s/^# //;p;}' "${BASH_SOURCE[0]}"
+}
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -22,6 +31,7 @@ command=(bash)
 while [ "$#" -gt 0 ]; do
     arg="$1"
     case "$arg" in
+        -h|--help) print_help; exit 0 ;;
         --rebuild) rebuild=true ;;
         --docker) docker_mode=true ;;
         --claude|--codex)
@@ -37,7 +47,7 @@ while [ "$#" -gt 0 ]; do
             fi
             command=("$@")
             break ;;
-        *) echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex | -- command [args...]]" >&2; exit 64 ;;
+        *) usage_line >&2; exit 64 ;;
     esac
     shift
 done

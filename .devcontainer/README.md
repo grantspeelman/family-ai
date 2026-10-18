@@ -16,6 +16,8 @@ container keeps running after you exit.
 | `--codex`   | Same, for Codex. |
 | `--docker`  | Privileged mode with nested Docker. Read [Nested Docker](#nested-docker) first. |
 
+`start.sh --help` prints the usage and the flags.
+
 Run a specific command by putting it and its arguments after `--`:
 
 ```sh

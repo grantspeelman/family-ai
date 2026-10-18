@@ -4,6 +4,8 @@
 # dir that comes first on PATH; the shims log their calls to files there. HOME
 # is a temp dir holding at most a dummy token file.
 
+bats_require_minimum_version 1.5.0
+
 setup() {
     SCRIPT="$BATS_TEST_DIRNAME/start.sh"
     SHIMS="$BATS_TEST_TMPDIR/shims"
@@ -20,6 +22,8 @@ setup() {
 #!/bin/bash
 d="$(dirname "$0")"
 echo "$*" >> "$d/docker.log"
+printf '%s\0' "$@" > "$d/last_argv"
+echo "HERDR_AGENT=${HERDR_AGENT-unset}" > "$d/last_agent"
 echo "USER_UID=${USER_UID-unset} USER_GID=${USER_GID-unset} HOST_SSH_AUTH_SOCK=${HOST_SSH_AUTH_SOCK-unset}" >> "$d/docker.env.log"
 if [ -e "$d/docker_info_fails" ] && [[ " $* " == *" docker info "* ]]; then
     echo "info" >> "$d/docker.info.log"
@@ -85,6 +89,11 @@ no_session_agent() {
     ENVV=(HOME="$FAKE_HOME" PATH="$SHIMS:/usr/bin:/bin" XDG_RUNTIME_DIR="$BATS_TEST_TMPDIR/run")
 }
 
+# last_argv: fills the array LAST with the last docker call's argv, one entry
+# per argument (empty ones and spaces kept). last_agent: HERDR_AGENT it saw.
+last_argv() { mapfile -d '' LAST < "$SHIMS/last_argv"; }
+last_agent() { cat "$SHIMS/last_agent"; }
+
 calls() { cat "$SHIMS/docker.log" 2>/dev/null || true; }
 call_count() { calls | grep -c . || true; }
 # nth_call N: the Nth recorded docker call line.
@@ -110,11 +119,64 @@ copy_checkout() {
     [ ! -e "$SHIMS/ssh-add.log" ]
 }
 
-@test "--help is not a flag: it gets the usage message and exit 64" {
-    start --help
-    [ "$status" -eq 64 ]
-    [[ "$output" == *"Usage:"* ]]
+HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude|--codex | -- command [args...]]
+  --rebuild  rebuild the image from scratch (also how Claude Code gets upgraded)
+  --docker   privileged mode with nested Docker; see compose.docker.yml first
+  --claude   run Claude Code directly instead of a shell (tells herdr it'"'"'s an agent)
+  --codex    run Codex directly instead of a shell (tells herdr it'"'"'s an agent)
+  -- command [args...]  run the given command inside the container'
+
+@test "--help prints the usage and flag list on stdout, exits 0, touches nothing" {
+    run --separate-stderr env -i "${ENVV[@]}" "$BASH" "$SCRIPT" --help
+    [ "$status" -eq 0 ]
+    [ "$output" = "$HELP_TEXT" ]
+    [ -z "$stderr" ]
     no_docker_calls
+    [ ! -e "$SHIMS/ssh-add.log" ]
+    [ ! -e "$SHIMS/ssh-agent.log" ]
+}
+
+@test "-h is the same as --help" {
+    run --separate-stderr env -i "${ENVV[@]}" "$BASH" "$SCRIPT" -h
+    [ "$status" -eq 0 ]
+    [ "$output" = "$HELP_TEXT" ]
+    no_docker_calls
+}
+
+@test "--help does no token-file check, even with a loose or missing token file" {
+    chmod 644 "$FAKE_HOME/.config/family-ai/gh.env"
+    start --help
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Token file mode"* ]]
+    rm "$FAKE_HOME/.config/family-ai/gh.env"
+    start --help
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"unauthenticated"* ]]
+}
+
+@test "--help combined with other flags still just prints help" {
+    start --rebuild --docker --help
+    [ "$status" -eq 0 ]
+    [ "$output" = "$HELP_TEXT" ]
+    no_docker_calls
+    [ ! -e "$SHIMS/ssh-add.log" ]
+    start --help --rebuild
+    [ "$status" -eq 0 ]
+    [ "$output" = "$HELP_TEXT" ]
+    no_docker_calls
+}
+
+@test "after --, -h and --help are ordinary command arguments" {
+    start -- claude --help
+    [ "$status" -eq 0 ]
+    last_argv
+    [ "${LAST[-2]}" = claude ]
+    [ "${LAST[-1]}" = --help ]
+    [[ "$output" != *"Usage:"* ]]
+    start -- ls -h
+    [ "$status" -eq 0 ]
+    last_argv
+    [ "${LAST[*]: -3}" = "app ls -h" ]
 }
 
 @test "an unknown flag after a valid one is still rejected" {
@@ -126,6 +188,85 @@ copy_checkout() {
 @test "a positional argument is rejected" {
     start extra
     [ "$status" -eq 64 ]
+    no_docker_calls
+}
+
+# ── command launch (-- command, --claude, --codex) ───────────────────────────
+# The default shell (no arguments) ends in "exec --user vscode app bash" and is
+# covered under "compose command line" below.
+
+@test "--rebuild -- claude --resume: builds with --pull --no-cache, execs the command, names the agent" {
+    start --rebuild -- claude --resume
+    [ "$status" -eq 0 ]
+    [[ "$(nth_call 1)" == *"build --pull --no-cache" ]]
+    last_argv
+    [ "${LAST[*]: -3}" = "app claude --resume" ]
+    [ "$(last_agent)" = "HERDR_AGENT=claude" ]
+}
+
+@test "arguments after -- arrive unchanged: spaces, empty, shell text and --docker" {
+    args=(printf '%s\n' 'two words' '' '$(touch nope)' --docker)
+    cd "$BATS_TEST_TMPDIR"
+    start -- "${args[@]}"
+    [ "$status" -eq 0 ]
+    last_argv
+    n=${#args[@]}
+    [ "${#LAST[@]}" -ge "$n" ]
+    for i in "${!args[@]}"; do
+        [ "${LAST[$(( ${#LAST[@]} - n + i ))]}" = "${args[$i]}" ]
+    done
+    [ "${LAST[$(( ${#LAST[@]} - n - 1 ))]}" = app ]
+    # Not run, and --docker after -- is not the flag.
+    [ ! -e "$BATS_TEST_TMPDIR/nope" ]
+    if calls | grep -q 'compose.docker.yml'; then false; fi
+    # A plain command does not set HERDR_AGENT.
+    [ "$(last_agent)" = "HERDR_AGENT=unset" ]
+}
+
+@test "-- codex resume sets HERDR_AGENT=codex" {
+    start -- codex resume
+    [ "$status" -eq 0 ]
+    last_argv
+    [ "${LAST[*]: -3}" = "app codex resume" ]
+    [ "$(last_agent)" = "HERDR_AGENT=codex" ]
+}
+
+@test "--codex runs codex and sets HERDR_AGENT=codex" {
+    start --codex
+    [ "$status" -eq 0 ]
+    last_argv
+    [ "${LAST[-2]}" = app ]
+    [ "${LAST[-1]}" = codex ]
+    [ "$(last_agent)" = "HERDR_AGENT=codex" ]
+}
+
+@test "--claude runs claude and sets HERDR_AGENT=claude" {
+    start --claude
+    [ "$status" -eq 0 ]
+    last_argv
+    [ "${LAST[-2]}" = app ]
+    [ "${LAST[-1]}" = claude ]
+    [ "$(last_agent)" = "HERDR_AGENT=claude" ]
+}
+
+@test "--claude --codex fails with exit 64 before docker" {
+    start --claude --codex
+    [ "$status" -eq 64 ]
+    [[ "$output" == *"mutually exclusive"* ]]
+    no_docker_calls
+}
+
+@test "a bare -- with no command fails with exit 64 before docker" {
+    start --
+    [ "$status" -eq 64 ]
+    [[ "$output" == *"Supply a command after --"* ]]
+    no_docker_calls
+}
+
+@test "--claude -- echo hi fails with exit 64 before docker" {
+    start --claude -- echo hi
+    [ "$status" -eq 64 ]
+    [[ "$output" == *"Supply a command after --"* ]]
     no_docker_calls
 }
 

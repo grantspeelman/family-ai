@@ -42,7 +42,7 @@ Possible bugs seen while writing the tests. None is fixed in this PR; the owner 
 
 - (a) `entrypoint.sh`: the background daemon log redirects fail silently when `/var/log` is not writable, and the script then waits the full 60 seconds.
 - (b) `postStartCommand.sh`: an invalid `settings.json` makes the script abort after `jq` has truncated `settings.json.tmp`, leaving a stale `.tmp` file.
-- (c) `start.sh` treats `-h` and `--help` as an unknown flag (exit 64).
+- (c) `start.sh` treats `-h` and `--help` as an unknown flag (exit 64). Fixed by [plan 18](18-start-launcher-bats.md).
 - (d) `start.sh`: a failing `ssh-agent -a` aborts with no `start.sh` message (ssh-agent's stdout goes to `/dev/null`; its stderr still shows). The same happens when the fixed socket's directory (`~/.ssh`) does not exist.
 - (e) `start.sh --docker` keeps polling for 90 seconds even if the container has exited.
 - (f) `start.sh` replaces a dead session agent silently.
