@@ -27,6 +27,8 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | Path | What |
 | --- | --- |
 | `first-build-pr-sequence.md` in the repo root | The overall PR sequence and its working notes. |
+| `Cargo.toml`, `Cargo.lock` | The Cargo workspace for the Rust code. Add new crates to `members`. |
+| `registry/` | The registry app: a Rust GraphQL API with its own `Dockerfile`, `schema.graphql` and tests. `registry/README.md` explains it. |
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
 | `.env.example` | Names of host environment variables the container reads, without values. Real `.env` files are gitignored and never committed. |
 | `lefthook.yml` | Git hook configuration for secret scans and changed-files checks before each commit. |
@@ -35,7 +37,7 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | `docs/README.md` | What belongs in `docs/` and what may be committed there. |
 | `docs/github-settings.md` | GitHub settings the owner applies by hand. Covers branch protection, fork PR approval, secret scanning and push protection, Dependabot alerts and security updates, and CodeQL default setup. |
 
-There is no application code yet. PRs that introduce a language or framework will add its rules.
+The registry app is a scaffold so far: one query and a health check. Language and framework rules arrive with the PRs that introduce those stacks (the registry app's tooling in PR 2, the family app's in PR 7).
 
 ## Running the checks
 

@@ -71,7 +71,7 @@ This rule applies as a standing step throughout the build, not just at the two f
 - Permissive licenses (MIT, Apache-2.0, BSD, ISC, public domain such as SQLite) are fine.
 - Disallow GPL-2.0-only, proprietary libraries, and source-available licenses with usage restrictions (SSPL, BSL, Elastic, FSL, O'Saasy).
 - Rust side: `cargo-deny` with a license allowlist, run in CI (PR 7) and in the pre-commit hook when dependencies change.
-- Registry app side: the equivalent license-check tool for whichever stack it uses, added in PR 2.
+- Registry app side: also Rust, so `cargo-deny` too, added in PR 2.
 - Dev tooling (linters, coverage, CI) is not linked into shipped code, so it is out of scope for the gate.
 
 **Also decided to track:**
