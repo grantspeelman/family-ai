@@ -191,7 +191,7 @@ if "${BASE[@]}" -f "$tmp/missing-boundary.yml" run --rm --no-deps -T app \
     touch /workspace/must-not-run > "$tmp/refused.log" 2>&1; then
     fail "session accepted a missing outer boundary"
 fi
-rg -q 'Agent boundary refused' "$tmp/refused.log" || fail "unexpected startup failure"
+grep -Fq 'Agent boundary refused' "$tmp/refused.log" || fail "unexpected startup failure"
 [ ! -e "$WORKSPACE_SOURCE/must-not-run" ] || fail "requested command ran without boundary"
 pass "missing mandatory sandbox refuses command without fallback"
 
