@@ -117,9 +117,11 @@ exists. There are no backing services: SQLite is a file on the app's volume.
 
 ## Commit checks
 
-The image ships `lefthook` and `gitleaks`, and `postStartCommand.sh` installs
+The image ships `lefthook`, `gitleaks`, `actionlint` and `zizmor`, and `postStartCommand.sh` installs
 the git hooks. The hook configuration (`lefthook.yml`) runs `gitleaks` on
-staged changes before every commit made inside the container, then
+staged changes before every commit made inside the container. It also runs
+`actionlint` (with shellcheck) and `zizmor --offline --persona=pedantic` on staged workflow files
+(`.github/workflows/*.{yml,yaml}`), skipping both for unrelated files, plus
 changed-files steps for lint, tests, duplication and complexity, and
 `cargo-deny` (placeholders until the tools are installed; see
 `docs/conventions.md`). A commit that contains a secret is blocked and the
@@ -138,8 +140,8 @@ this mode.
 ## Changing the image
 
 The image is `ubuntu:26.04`. Most tools come from Ubuntu's archive; `gh` and
-`gitleaks` are too old there, so they're checksummed release binaries. `lefthook`
-is a checksummed binary too, and `bats-core` (the bash test runner) is a
+`gitleaks` are too old there, so they're checksummed release binaries. `lefthook`, `actionlint` and `zizmor`
+are checksummed binaries too, and `bats-core` (the bash test runner) is a
 checksummed source tarball installed with its own `install.sh`.
 
 `container-structure-test.yaml` is the spec for the image. Each pinned tool has

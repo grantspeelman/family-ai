@@ -17,6 +17,10 @@ Static security analysis runs on the repo's code automatically, so common vulner
 - Analysis of what exists today: the GitHub Actions workflows.
 - A documented rule for adding a language to the analysis when a stack is introduced (Rust, and whatever the registry app uses).
 
+The issue #22 decision is to retain CodeQL Actions analysis alongside zizmor.
+zizmor supplies local commit checks and the CI gate; CodeQL supplies complementary
+queries and code-scanning results through the existing default setup.
+
 ## Out of scope
 
 - Rust and registry-app analysis, which arrive with PRs 1 and 6 when there is code to analyse.

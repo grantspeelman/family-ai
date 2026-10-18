@@ -1,4 +1,4 @@
-# 17 — start.sh launcher tests in bats, and --help
+# 18 — start.sh launcher tests in bats, and --help
 
 **Status:** in progress
 
