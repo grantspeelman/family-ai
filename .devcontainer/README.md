@@ -157,3 +157,6 @@ smoke test and every tracked `*.bats` file on every push to `main` and every PR.
 files in temp dirs (including symlinks). It needs no Docker: run it with
 `bats .devcontainer/token-file-check.bats`. CI finds and runs it, and any other
 tracked `*.bats` file, automatically.
+
+Besides that, `start.bats`, `post-start.bats` and `entrypoint.bats` test the
+scripts here, and `.lefthook/placeholder.bats` the hook helper, with shimmed commands.
