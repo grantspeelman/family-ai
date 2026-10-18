@@ -8,7 +8,7 @@ Static security analysis runs on the repo's code automatically, so common vulner
 
 ## Builds on
 
-- 07 — CI full-suite gate
+- 07 — CI gate
 - 08 — Workflow safety (CodeQL runs under the same permission rules)
 
 ## In scope
@@ -25,11 +25,13 @@ Static security analysis runs on the repo's code automatically, so common vulner
 
 ## Acceptance checklist
 
-- [ ] CodeQL runs on this PR and on `main`, and passes. Not verified: needs a real CI run. Locally, `actionlint` and the rules script pass on the workflow.
-- [x] Its permissions are the minimum CodeQL documents (`security-events: write` on the analysis job only). Top level is `contents: read`; the job adds `security-events: write` with a reason comment, per the CodeQL action README ("All advanced setup code scanning workflows must have the `security-events: write` permission").
-- [ ] Results appear in the repo's code scanning tab. Owner action: switch off default setup if on, then check after the first run ([docs/github-settings.md](../github-settings.md#code-scanning-codeql)).
-- [x] The conventions document says a new language is added to the analysis in the PR that introduces it.
-- [ ] Confirmed against GitHub's current terms that code scanning is free for public repos, with the date checked. Eligibility wording ("publicly visible, or GitHub Code Security is enabled") is cited with the date 2026-10-14 in docs/github-settings.md, but no page says "free" outright and the owner's Enable flow is untested; left unticked.
+Delivered through GitHub's default setup (the "or GitHub's default setup" option above), so there is no workflow file.
+
+- [x] CodeQL runs on this PR and on `main`, and passes. Default setup ran `Analyze (actions)` and `Analyze (python)` on `main` at `5f44af8`, both passing. PRs against `main` get the same checks.
+- [x] Its permissions are the minimum CodeQL documents (`security-events: write` on the analysis job only). Not applicable as written: default setup runs under GitHub's own configuration, not a workflow in the repo, so there is no permissions block for us to set.
+- [x] Results appear in the repo's code scanning tab. The code scanning API lists `actions` and `python` analyses for `refs/heads/main` (2026-10-17), with no errors and no alerts.
+- [x] The conventions document says a new language is added to the analysis in the PR that introduces it. Default setup adds it by itself; [docs/conventions.md](../conventions.md#codeql) has the PR confirm it did.
+- [ ] Confirmed against GitHub's current terms that code scanning is free for public repos, with the date checked. Eligibility wording ("publicly visible, or GitHub Code Security is enabled") is cited with the date 2026-10-14 in docs/github-settings.md, but no page says "free" outright; left unticked for the owner. Default setup is already running on this public repo.
 
 ## Review depth
 
