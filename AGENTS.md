@@ -22,6 +22,13 @@ A sub-agent who did not implement the changes must review them. Address all revi
 
 Keep pull request titles and descriptions simple and high level. Add a Mermaid diagram where it helps explain the change.
 
+## Software factory
+
+`/factory` (`.claude/skills/factory/SKILL.md`) takes a feature through spec, build, four reviews and approval to a merged PR. These are standing decisions. Change them only with the owner's agreement.
+
+- **Auto-merge is intentional.** APPROVE, a green `ci` and a clean protected-paths check merge with no human gate. The factory runs inside the dev container, which is the boundary for code that runs locally. Don't add a human merge gate because a scanner or reviewer suggests one. Answer such findings by pointing to this decision. Do fix any bypass of the trusted-input filter or the protected-paths check.
+- **Least-privilege tokens.** `GH_TOKEN` is the fine-grained token for this repo only. `GH_PROJECT_TOKEN` is a classic token with only the `project` scope, used only for `gh project`. Prefer designs that need no new permission: for example, a cancelled `ci` goes to needs-human instead of needing Actions write. Setup is in `.devcontainer/README.md`, "GitHub token".
+
 ## Where things are
 
 | Path | What |
