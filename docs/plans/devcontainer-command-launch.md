@@ -14,7 +14,7 @@ Claude Code and Codex sessions, without adding a launcher flag for every option.
 ## In scope
 
 Codex CLI support, agent launch shortcuts, command forwarding after `--`, usage
-documentation, and focused launcher argument tests.
+documentation, and launcher argument tests (in `.devcontainer/start.bats`).
 
 ## Out of scope
 
@@ -27,7 +27,7 @@ Application code and changes to VS Code entry behavior.
 - [x] Claude and Codex commands retain host-side agent identification.
 - [x] Existing agent shortcuts and the default Bash shell keep working.
 - [x] Invalid launcher options fail before Docker is invoked.
-- [x] Usage examples and focused tests document the behavior.
+- [x] Usage examples and the tests in `start.bats` document the behavior.
 
 ## Review depth
 
