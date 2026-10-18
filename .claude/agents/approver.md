@@ -27,7 +27,7 @@ ESCALATE if any of these is true, because the repo's sizing rule wants a close h
 - It adds or changes an API contract (the GraphQL schema, endpoints, response or error shapes).
 - It handles stored or personal data.
 - It is security-adjacent: authentication, authorisation, input validation, secrets, crypto.
-- It touches a protected path: any output from `git -C <worktree> diff --name-only --no-renames origin/main...HEAD | grep -iE '^("|\.github/|\.devcontainer/|\.lefthook/|factory/|lefthook\.yml$|docs/conventions\.md$|\.mcp\.json$|\.gitleaks(\.toml|ignore)$|\.gitmodules$)|(^|/)(\.claude/|CLAUDE(\.local)?\.md$|AGENTS\.md$|Cargo\.(toml|lock)$)'`. These are the factory's guardrails and dependency manifests; the orchestrator fetched `origin/main` for you and runs the same check before merging. If the command errors, ESCALATE.
+- It touches a protected path: any output from `git -C <worktree> diff --name-only --no-renames origin/main...HEAD | grep -iE '^("|\.github/|\.devcontainer/|\.lefthook/|factory/|lefthook\.yml$|docs/conventions\.md$|\.mcp\.json$|\.gitleaks(\.toml|ignore)$|\.gitmodules$)|(^|/)(\.claude/|CLAUDE(\.local)?\.md$|AGENTS\.md$|Cargo\.(toml|lock)$|build\.rs$|\.cargo/|rust-toolchain(\.toml)?$)'`. These are the factory's guardrails and dependency manifests; the orchestrator fetched `origin/main` for you and runs the same check before merging. If the command errors, ESCALATE.
 - It adds a dependency in any other manifest.
 - The spec asks for a close read, or you are unsure.
 
