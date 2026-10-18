@@ -174,7 +174,7 @@ Then continue from step 2.
 
 ### `/factory approve <job-id>`
 
-For a job at Stage = needs-human (otherwise report its Stage and stop). Find the job's PR (Rules) and make sure the worktree exists (step 2), then wait for CI as in step 7. Green: merge and clean up as in step 7 (skip the protected-paths check: this is the human's decision), `gh issue edit <n> --remove-label needs-human`, and set Stage to merged. Anything else: report it and do not merge.
+For a job at Stage = needs-human (otherwise report its Stage and stop). Find the job's PR (Rules) and make sure the worktree exists (step 2), then wait for CI as in step 7. Green: run the protected-paths check (Rules). If it matches, list the matched files and ask the user to confirm; without an explicit yes, don't merge and report it. When the check is clean or the user has confirmed, run step 7's merge command and cleanup, `gh issue edit <n> --remove-label needs-human`, and set Stage to merged. Anything else: report it and do not merge.
 
 ### `/factory rework <job-id> <note>`
 
