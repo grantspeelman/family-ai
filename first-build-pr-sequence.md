@@ -27,7 +27,7 @@ Also in PR 0:
 - Secret scanning in the pre-commit hook (gitleaks or similar), plus GitHub secret scanning with push protection switched on.
 - No real Fly token or API key in GitHub Actions. CI runs against the Fly mock, so it never needs one.
 - Fork PRs: CI workflows must not run untrusted code with secrets available.
-- Dependabot (plan 10, `.github/dependabot.yml`) and CodeQL (plan 11, GitHub default setup). The repo settings and the free-for-public-repos evidence are in `docs/github-settings.md`.
+- Dependabot (`.github/dependabot.yml`) and CodeQL (GitHub default setup). The repo settings and the free-for-public-repos evidence are in `docs/github-settings.md`.
 - Decide which project docs get committed. Architecture docs are fine if you are happy sharing them; keep pricing and positioning out of the repo (the rule is in [docs/conventions.md](docs/conventions.md#what-goes-in-the-repo)).
 
 ## PR sequence

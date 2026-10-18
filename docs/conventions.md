@@ -2,7 +2,7 @@
 
 Standing rules for every PR in this build. `AGENTS.md` is the entry point and covers the mechanics (container, checks, per-PR steps). This document covers the principles behind them. Where something is not decided yet, it says so.
 
-"PR N" means the Nth PR in the build sequence in `first-build-pr-sequence.md`. "Plan NN" means the numbered plan in `docs/plans/`. They are different numberings: for example PR 7 is the family app tooling, while plan 07 is the CI gate.
+"PR N" means the Nth PR in the build sequence in `first-build-pr-sequence.md`.
 
 ## What is enforced today
 
@@ -13,14 +13,14 @@ Coverage gap: Until PR 2 and PR 7 install the application checks and add their g
 | Rule | Enforced by | Status |
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
-| Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place (plan 06); steps are placeholders until PRs 2 and 7 |
-| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place (plan 07). It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place; steps are placeholders until PRs 2 and 7 |
+| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place. It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | Pre-commit hook and CI (`workflows` job): actionlint and zizmor | Enforced for staged workflows locally and all workflows in CI. Automated coverage and remaining reviewer checks are listed below. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
-| Bash script tests (`*.bats`) | CI (`image` job, step "Bats tests", inside the `ci` gate) | Workflow in place (plan 15). Finds every tracked `*.bats` file with `git ls-files` and runs them in the built image; fails if none are found. Not run by the pre-commit hook |
-| Dependabot version updates | `.github/dependabot.yml` | Config in place (plan 10) for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
-| CodeQL analysis | GitHub code scanning, default setup (a repo setting, no workflow file) | On (plan 11), analysing `actions` and `python` on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:`. Owner's setting: [docs/github-settings.md](github-settings.md#code-scanning-codeql) |
+| Bash script tests (`*.bats`) | CI (`image` job, step "Bats tests", inside the `ci` gate) | Workflow in place. Finds every tracked `*.bats` file with `git ls-files` and runs them in the built image; fails if none are found. Not run by the pre-commit hook |
+| Dependabot version updates | `.github/dependabot.yml` | Config in place for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
+| CodeQL analysis | GitHub code scanning, default setup (a repo setting, no workflow file) | On, analysing `actions` and `python` on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:`. Owner's setting: [docs/github-settings.md](github-settings.md#code-scanning-codeql) |
 | Dependency license check, registry app | CI | PR 2, not yet |
-| Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder (plan 06); real check in PR 7, not yet |
+| Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder; real check in PR 7, not yet |
 
 ## Pre-commit hook: what passing means, and adding a language
 
@@ -41,7 +41,7 @@ For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it o
 
 ## Testing bash scripts
 
-Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. CI runs every tracked `*.bats` file automatically (the `image` job finds them with `git ls-files` and runs them in the built image, so the same pinned bats-core), so a new test needs no workflow change. The file must be committed (tracked) to be found, and CI fails if it finds none. See [plan 14](plans/14-bats-core.md), [plan 15](plans/15-bats-ci.md) and [plan 16](plans/16-bats-script-tests.md).
+Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. CI runs every tracked `*.bats` file automatically (the `image` job finds them with `git ls-files` and runs them in the built image, so the same pinned bats-core), so a new test needs no workflow change. The file must be committed (tracked) to be found, and CI fails if it finds none.
 
 Covered today: `.devcontainer/start.sh`, `postStartCommand.sh`, `entrypoint.sh`, the token-file check, and `.lefthook/placeholder.sh`. Tests shim external commands (`docker`, `ssh-agent` and so on) and use temp dirs, never the real `HOME`. `.devcontainer/smoke-test.sh` is the deliberate exception: it builds and starts a real container, so it needs Docker and a network and CI runs it as its own step.
 
@@ -64,7 +64,7 @@ zizmor checks action SHA pins (including first-party actions), checkout credenti
 
 Reviewers still check the exact read-only permission default and reasons for broader per-job permissions, the absence of unnecessary secrets and plain API keys, all expressions in `run:` (the convention bans even trusted expressions), job timeouts, action version comments and downloaded binary checksums. zizmor does not enforce every repository-specific rule or prove that a workflow is safe.
 
-Run `actionlint` and `zizmor --offline --persona=pedantic .github/workflows/` from the repo root. The tools are installed by a rebuilt dev container. `bats .lefthook/workflows.bats` tests lint failures and actual commit rejection in disposable repositories, including unrelated-file skips. The workflow audit is in [plan 08](plans/08-workflow-safety.md); the replacement and hook checklist is in [plan 17](plans/17-workflow-linters.md).
+Run `actionlint` and `zizmor --offline --persona=pedantic .github/workflows/` from the repo root. The tools are installed by a rebuilt dev container. `bats .lefthook/workflows.bats` tests lint failures and actual commit rejection in disposable repositories, including unrelated-file skips.
 
 Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.md](github-settings.md).
 
@@ -110,9 +110,9 @@ It picks its own languages. Actions analysis covers workflows; Python analysis c
 
 ## What goes in the repo
 
-The repo is public and history is permanent, so what is committed is a deliberate choice (plan 12). The rule:
+The repo is public and history is permanent, so what is committed is a deliberate choice. The rule:
 
-- **Yes:** architecture docs, engineering docs, plans, conventions, runbooks and settings guides for the repo itself.
+- **Yes:** architecture docs, engineering docs, conventions, runbooks and settings guides for the repo itself.
 - **No:** pricing, positioning, go-to-market or other commercial strategy, named customers or competitors, and personal data about people. Anything commercially sensitive, including drafts of it and notes that quote it.
 - **Unsure:** leave it out and ask the owner. Adding a document later is easy; removing one from history is not.
 
@@ -122,8 +122,8 @@ A PR that adds or changes a doc is read against this rule. Mentioning that prici
 
 These apply to every PR, not just the foundation ones.
 
-1. **Start from a written spec.** Each PR starts from its plan (a short spec and checklist). The agent restates the goal, scope and checklist and confirms it understands before touching code.
-2. **Decide review depth per PR, and size the PR by it.** Each plan says whether it needs a close read or a skim (see sizing below).
+1. **Start from a written spec.** Each PR starts from a short spec and checklist in its description. The agent restates the goal, scope and checklist and confirms it understands before touching code.
+2. **Decide review depth per PR, and size the PR by it.** Each PR says whether it needs a close read or a skim (see sizing below).
 3. **The agent runs the tests itself and shows them passing** before marking a PR done. The pre-commit hook backs this up on changed files; it does not replace running the tests, and CI is the real gate.
 4. **A PR that adds a test or lint job adds it to `ci`'s `needs:` in the same PR.** Otherwise the job runs but does not gate merging.
 5. **Keep PRs small enough for a quick loop.** Rust compile times are slow, so large PRs make the test-fix-retest loop painful for the agent.
@@ -169,10 +169,9 @@ Open items:
 ## Commits and PRs
 
 - **One concept per PR.** If a PR needs "and" to describe it, split it.
-- **Stacked branches.** Foundation PRs are stacked, one on the previous, on branches named `pr0/NN-slug` matching the plan number.
+- **Stacked branches.** Foundation PRs are stacked, one on the previous, on branches named `pr0/NN-slug`, numbered in stack order.
 - **Commit messages.** A short imperative summary line (for example "Add gitleaks pre-commit hook"), then a body only if the why is not obvious. Commits made by an agent end with a `Co-Authored-By:` line naming the agent. Dependabot-authored titles are exempt: they use the prefixes set in `dependabot.yml` (`ci: Bump ...`, `devcontainer: Bump ...`).
-- **PR description.** Say what the PR does, link its plan, state the checklist status (each item ticked, or unticked with the reason), and state the review depth that applies (close read or skim).
-- **Plan status.** Set the plan's `Status` to `in progress` while the PR is open, and to `merged` with the PR link at the end (see `AGENTS.md`).
+- **PR description.** Say what the PR does, state the checklist status (each item ticked, or unticked with the reason), and state the review depth that applies (close read or skim).
 - **Never bypass the hook** with `--no-verify`.
 - **Public text stays clean.** Commit messages, PR text and docs are public. Follow the public-repo rule in `AGENTS.md` about security concerns.
 - **Pricing and positioning stay out of the repo.** See [What goes in the repo](#what-goes-in-the-repo).
