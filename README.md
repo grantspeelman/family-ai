@@ -28,9 +28,9 @@ ___________|________________|_______________|__________________|______
 
 ## What is this?
 
-A placeholder. Nothing to run yet.
+Mostly guardrails. The one thing to run is the [registry app](registry/README.md), a GraphQL scaffold with a single query.
 
-family-ai is being built the careful way round: guardrails first, house second. So far that means a dev container, CI, secret scanning, changed-files checks, workflow safety rules, Dependabot and CodeQL. Every one of them is guarding an empty building. The application code arrives in later PRs.
+family-ai is being built the careful way round: guardrails first, house second. So far that means a dev container, CI, secret scanning, changed-files checks, workflow safety rules, Dependabot and CodeQL. Every one of them is guarding a nearly empty building. The application code arrives in later PRs.
 
 ## Where to look
 

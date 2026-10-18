@@ -14,17 +14,18 @@ Coverage gap: Until PR 2 and PR 7 install the application checks and add their g
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
 | Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place; steps are placeholders until PRs 2 and 7 |
-| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place. It covers the container checks, the workflow safety lint and the full-history secret scan. Lint, tests, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 1, 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place. It covers the container checks, the workflow safety lint, the full-history secret scan and the registry app's tests and image. Lint, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | Pre-commit hook and CI (`workflows` job): actionlint and zizmor | Enforced for staged workflows locally and all workflows in CI. Automated coverage and remaining reviewer checks are listed below. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Bash script tests (`*.bats`) | CI (`image` job, step "Bats tests", inside the `ci` gate) | Workflow in place. Finds every tracked `*.bats` file with `git ls-files` and runs them in the built image; fails if none are found. Not run by the pre-commit hook |
-| Dependabot version updates | `.github/dependabot.yml` | Config in place for GitHub Actions and the dev container's `FROM` image. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
+| Registry app tests and image | CI (`registry` job, inside the `ci` gate) | Workflow in place. Runs `cargo test --locked` in the Dockerfile's Rust `toolchain` stage, builds `registry/Dockerfile`, starts the image and queries `/healthz` and `/graphql`. Not run by the pre-commit hook |
+| Dependabot version updates | `.github/dependabot.yml` | Config in place for GitHub Actions, Cargo, the dev container's `FROM` image and the registry app's `FROM` images. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
 | CodeQL analysis | GitHub code scanning, default setup (a repo setting, no workflow file) | On, analysing `actions` and `python` on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:`. Owner's setting: [docs/github-settings.md](github-settings.md#code-scanning-codeql) |
-| Dependency license check, registry app | CI | PR 2, not yet |
-| Dependency license check, Rust (`cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder; real check in PR 7, not yet |
+| Dependency license check, registry app (Rust, `cargo-deny`) | CI | PR 2, not yet |
+| Dependency license check, family app (Rust, `cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder; real check in PR 7, not yet |
 
 ## Pre-commit hook: what passing means, and adding a language
 
-The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint and the full-history secret scan.
+The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint, the full-history secret scan and the registry app's tests and image.
 
 **Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that lint, tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders.
 
@@ -76,20 +77,23 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 | --- | --- | --- | --- |
 | `github-actions` | `/` | `uses:` lines in `.github/workflows/` | 5 |
 | `docker` | `/.devcontainer` | The `FROM` image in `.devcontainer/Dockerfile` | 3 |
+| `docker` | `/registry` | The `FROM` images in `registry/Dockerfile`, except the Rust image (see below) | 3 |
+| `cargo` | `/` | Crates in the root `Cargo.toml` workspace and `Cargo.lock` | 5 |
 
-**New ecosystem rule.** A PR that introduces a new package ecosystem (Cargo with PR 1 or PR 6, the registry app's package manager with PR 2, and so on) adds that ecosystem's entry to `.github/dependabot.yml` in the same PR, with the same weekly schedule and an open-PR limit. Otherwise its dependencies go stale unnoticed. Reviewers check for it. The same applies to anything else the two entries above do not read, none of which exists today: local composite actions under `.github/actions/` (the `github-actions` entry at `/` does not cover them), a compose file with an `image:` line (the `docker` ecosystem does not read compose files; add a `docker-compose` entry), and devcontainer features or images in `devcontainer.json` (add a `devcontainers` entry). A PR adding any of these adds the matching entry in the same PR.
+**New ecosystem rule.** A PR that introduces a new package ecosystem (a front end's package manager, for example) adds that ecosystem's entry to `.github/dependabot.yml` in the same PR, with the same weekly schedule and an open-PR limit. Otherwise its dependencies go stale unnoticed. Reviewers check for it. The same applies to anything else the entries above do not read, none of which exists today: a Dockerfile in a directory other than `/.devcontainer` and `/registry` (each directory needs its own `docker` entry), local composite actions under `.github/actions/` (the `github-actions` entry at `/` does not cover them), a compose file with an `image:` line (the `docker` ecosystem does not read compose files; add a `docker-compose` entry), and devcontainer features or images in `devcontainer.json` (add a `devcontainers` entry). A PR adding any of these adds the matching entry in the same PR.
 
 **How it fits this repo's conventions**
 
 - Actions are pinned by full commit SHA with a trailing `# vX.Y.Z` comment (workflow safety rule 6). Dependabot reads that form and updates the SHA and the comment together, as long as the comment is on the same line. Keep that format or updates stop applying cleanly.
 - Dependabot PRs run the `ci` workflow as fork-like runs: a read-only `GITHUB_TOKEN` and no Actions secrets (GitHub's docs: [troubleshooting Dependabot on GitHub Actions](https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions), checked 2026-10-14). No workflow here uses a secret (rule 3; reviewers check references and their reasons) and the top-level permission is `contents: read`, so they run unchanged. This holds for every Dependabot-triggered `push`, `pull_request` and `schedule` run, not just PRs. Dependabot secrets are a separate store that this repo does not use, so nothing here should reach for `secrets.` in a Dependabot-triggered job.
-- The `docker` entry only covers the `FROM` line. Dependabot does not touch the version and SHA-256 pins in `ARG` and `ENV` lines, or in workflow `env:`. These stay **manually maintained**, so nobody should assume they are covered:
+- The `docker` entries only cover the `FROM` lines. Dependabot does not touch the version and SHA-256 pins in `ARG` and `ENV` lines, or in workflow `env:`. These stay **manually maintained**, so nobody should assume they are covered:
   - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, `BATS_VERSION` and `BATS_SHA256`, plus `ACTIONLINT_VERSION` and `ZIZMOR_VERSION` and their architecture-specific checksums, in `.devcontainer/Dockerfile`.
   - `CST_VERSION` and `CST_SHA256` in the `image` job of `.github/workflows/devcontainer-ci.yml`.
   - `ACTIONLINT_VERSION`, `ACTIONLINT_SHA256`, `ZIZMOR_VERSION` and `ZIZMOR_SHA256` in the `workflows` job of the same file.
   - Packages installed from the Ubuntu archive follow the base image and are not pinned.
 
   When bumping one by hand, take the new SHA-256 from the project's published checksums (workflow safety rule 6). There is no automation for this yet.
+- The registry image stays on the dev container's Rust (1.93 from the Ubuntu archive) and the crate's `rust-version`, so the `/registry` entry ignores major and minor updates of the `rust` image. The tag `1.93-slim-trixie` floats across patch releases, which arrive on rebuild, so Dependabot proposes no Rust image bumps. The Debian runtime image still gets PRs. Bump the dev container's Rust, `rust-version` and the `rust` tag in `registry/Dockerfile` together, by hand.
 - A base image bump can propose a tag the container does not suit (for example a non-LTS Ubuntu). A base-image bump is proposed by Dependabot but judged by a human: review it, and close it if it is not wanted. If the same unwanted tag would be proposed every week, add an `ignore` entry for it to the `docker` entry in `dependabot.yml`, with a comment giving the reason.
 
 ## CodeQL
@@ -106,7 +110,7 @@ It picks its own languages. Actions analysis covers workflows; Python analysis c
 - **Not a gate yet.** CodeQL is not a required check and is not in the `ci` job's `needs:`. Decide that once there is real code and a sense of its noise.
 - **When to switch to a workflow (advanced setup).** Switch when we need something default setup cannot give: custom queries, a real build for a compiled language, or a CodeQL check we control and can make required. That PR adds the workflow under the workflow safety rules and switches default setup off first, because GitHub rejects advanced-setup uploads while default setup is on.
 
-**New language rule.** GitHub says default setup adds a new CodeQL-supported language automatically once its code is in the repo (Rust is supported). A PR that introduces a language (Rust with PR 1 or PR 6, the registry app's language with PR 2, and so on) still checks this. After it merges, `main` should show a new `Analyze (<language>)` check, and the language should be listed under **CodeQL analysis**, then **View CodeQL configuration**, in the repo settings. If it is missing, the owner adds it under **Edit**, then **Languages**. Reviewers check the PR says this was confirmed.
+**New language rule.** GitHub says default setup adds a new CodeQL-supported language automatically once its code is in the repo (Rust is supported). A PR that introduces a language (Rust with PR 1, a front end's language later, and so on) still checks this. After it merges, `main` should show a new `Analyze (<language>)` check, and the language should be listed under **CodeQL analysis**, then **View CodeQL configuration**, in the repo settings. If it is missing, the owner adds it under **Edit**, then **Languages**. Reviewers check the PR says this was confirmed.
 
 ## What goes in the repo
 
@@ -158,8 +162,8 @@ Scope: dependencies linked into shipped code. Dev tooling (linters, coverage, CI
 
 Planned checks (none exist yet):
 
-- Rust: `cargo-deny` with a license allowlist, in CI (PR 7) and in the pre-commit hook when dependencies change.
-- Registry app: the equivalent license-check tool for its stack, added in PR 2.
+- Registry app: also Rust, so `cargo-deny` with a license allowlist, added in PR 2.
+- Family app: `cargo-deny` with a license allowlist, in CI (PR 7). The pre-commit hook also runs it when dependencies change.
 
 Open items:
 
@@ -170,7 +174,7 @@ Open items:
 
 - **One concept per PR.** If a PR needs "and" to describe it, split it.
 - **Stacked branches.** Foundation PRs are stacked, one on the previous, on branches named `pr0/NN-slug`, numbered in stack order.
-- **Commit messages.** A short imperative summary line (for example "Add gitleaks pre-commit hook"), then a body only if the why is not obvious. Commits made by an agent end with a `Co-Authored-By:` line naming the agent. Dependabot-authored titles are exempt: they use the prefixes set in `dependabot.yml` (`ci: Bump ...`, `devcontainer: Bump ...`).
+- **Commit messages.** A short imperative summary line (for example "Add gitleaks pre-commit hook"), then a body only if the why is not obvious. Commits made by an agent end with a `Co-Authored-By:` line naming the agent. Dependabot-authored titles are exempt: they use the prefixes set in `dependabot.yml` (`ci: Bump ...`, `devcontainer: Bump ...`, `registry: Bump ...`, `cargo: Bump ...`).
 - **PR description.** Say what the PR does, state the checklist status (each item ticked, or unticked with the reason), and state the review depth that applies (close read or skim).
 - **Never bypass the hook** with `--no-verify`.
 - **Public text stays clean.** Commit messages, PR text and docs are public. Follow the public-repo rule in `AGENTS.md` about security concerns.

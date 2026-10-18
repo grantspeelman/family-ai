@@ -1,0 +1,8 @@
+# Keep the build context small and keep local secrets out of it.
+# This file also applies to the dev container image build, whose context is the
+# repo root; that build only copies files from .devcontainer/.
+.git
+**/target
+.env
+.env.*
+.devcontainer/.env

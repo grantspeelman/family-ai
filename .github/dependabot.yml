@@ -25,3 +25,31 @@ updates:
     open-pull-requests-limit: 3
     commit-message:
       prefix: "devcontainer"
+
+  # The registry app image. Only the `FROM` lines of registry/Dockerfile are updated.
+  # The Rust image stays on the dev container's Rust (1.93 from the Ubuntu archive)
+  # and the crate's `rust-version`; bump the three together by hand. The tag
+  # `1.93-slim-trixie` floats across patch releases, which arrive on rebuild, so
+  # Dependabot proposes no Rust image bumps. The Debian runtime image still gets PRs.
+  - package-ecosystem: "docker"
+    directory: "/registry"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "registry"
+    ignore:
+      - dependency-name: "rust"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # Rust crates in the Cargo workspace. Dependabot reads the root Cargo.toml and
+  # Cargo.lock, and follows the workspace members from there.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "cargo"
