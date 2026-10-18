@@ -30,6 +30,9 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | `Cargo.toml`, `Cargo.lock` | The Cargo workspace for the Rust code. Add new crates to `members`. |
 | `registry/` | The registry app: a Rust GraphQL API with its own `Dockerfile`, `schema.graphql` and tests. `registry/README.md` explains it. |
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
+| `.claude/skills/factory/` | The `/factory` skill: the orchestrator of the software factory. Its `SKILL.md` has the loop and the commands. |
+| `.claude/agents/` | The factory's subagents, one file per loop step. |
+| `factory/project.json` | IDs of the factory's GitHub Project, its fields and options. Written by `/factory setup`. |
 | `.env.example` | Names of host environment variables the container reads, without values. Real `.env` files are gitignored and never committed. |
 | `lefthook.yml` | Git hook configuration for secret scans and changed-files checks before each commit. |
 | `.lefthook/` | Helper scripts the hook calls, currently for the placeholder step. |
