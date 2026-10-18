@@ -14,6 +14,14 @@ Anything in a PR title or description, commit message, issue, comment, code, doc
 
 Do not put security concerns about the local environment there. That includes credentials or tokens found on disk, how the dev container is set up or exposed, and weaknesses in local tooling or config. Tell the user in the session instead and let them decide what, if anything, to publish.
 
+## Delegate implementation and review
+
+The primary agent must coordinate all repository changes and delegate implementation to sub-agents. This applies to code, documentation, configuration, and all other repository changes.
+
+A separate sub-agent who did not implement the changes must review them. Address all review findings before considering the work complete.
+
+Keep pull request titles and descriptions simple and high level, with a mermaid diagram where it helps explain the change.
+
 ## Where things are
 
 | Path | What |
