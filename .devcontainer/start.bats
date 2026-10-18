@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Tests start.sh without Docker, a network or the real HOME. Every external
-# command it runs (docker, ssh-add, ssh-agent, id, sleep) is a shim in a temp
+# command it runs (docker, git, ssh-add, ssh-agent, id, sleep) is a shim in a temp
 # dir that comes first on PATH; the shims log their calls to files there. HOME
 # is a temp dir holding at most a dummy token file.
 
@@ -62,11 +62,24 @@ case "${1:-}" in
     *) exit 1 ;;
 esac
 EOF
+    # git: log argv, whether docker had already run, and the agent socket it saw;
+    # exit with git_status, printing a git-style error when that is non-zero.
+    cat > "$SHIMS/git" <<'EOF'
+#!/bin/bash
+d="$(dirname "$0")"
+echo "$*" >> "$d/git.log"
+if [ -e "$d/docker.log" ]; then echo yes; else echo no; fi > "$d/git_after_docker"
+echo "SSH_AUTH_SOCK=${SSH_AUTH_SOCK-unset}" > "$d/git_env"
+s="$(cat "$d/git_status")"
+if [ "$s" -ne 0 ]; then echo "fatal: Not possible to fast-forward, aborting." >&2; fi
+exit "$s"
+EOF
     printf '#!/bin/bash\necho "$*" >> "$(dirname "$0")/sleep.log"\n' > "$SHIMS/sleep"
     chmod +x "$SHIMS"/*
     echo 0 > "$SHIMS/l_seq"
     echo 0 > "$SHIMS/add_status"
     echo 0 > "$SHIMS/agent_status"
+    echo 0 > "$SHIMS/git_status"
     echo 1234 > "$SHIMS/fake_uid"
     echo 5678 > "$SHIMS/fake_gid"
 
@@ -120,7 +133,7 @@ copy_checkout() {
 }
 
 HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude|--codex | -- command [args...]]
-  --rebuild  rebuild the image from scratch (also how Claude Code gets upgraded)
+  --rebuild  git pull --ff-only, then rebuild the image from scratch (also how Claude Code gets upgraded)
   --docker   privileged mode with nested Docker; see compose.docker.yml first
   --claude   run Claude Code directly instead of a shell (tells herdr it'"'"'s an agent)
   --codex    run Codex directly instead of a shell (tells herdr it'"'"'s an agent)
@@ -375,6 +388,42 @@ teardown() { rm -rf /tmp/family-ai-bats-fixed; }
     [[ "$(nth_call 1)" == *"compose.ssh.yml build --pull --no-cache" ]]
     [[ "$(nth_call 2)" == *"compose.ssh.yml up --detach --force-recreate" ]]
     if calls | grep -q -e '--build'; then false; fi
+}
+
+@test "--rebuild runs git pull --ff-only in the checkout before building" {
+    start --rebuild
+    [ "$status" -eq 0 ]
+    [ "$(cat "$SHIMS/git.log")" = "-C $(cd "$BATS_TEST_DIRNAME/.." && pwd) pull --ff-only" ]
+    [ "$(cat "$SHIMS/git_after_docker")" = no ]
+    [[ "$(nth_call 1)" == *" build --pull --no-cache" ]]
+}
+
+@test "--rebuild pulls after the ssh-agent setup, with the socket start.sh chose" {
+    # No session agent: start.sh starts one at the fixed path and points
+    # SSH_AUTH_SOCK at it, so git only sees that path if it runs afterwards.
+    no_session_agent
+    ssh_seq 2 0
+    start --rebuild
+    [ "$status" -eq 0 ]
+    [ "$(cat "$SHIMS/git_env")" = "SSH_AUTH_SOCK=$BATS_TEST_TMPDIR/run/family-ai-ssh-agent.sock" ]
+}
+
+@test "a failing pull stops --rebuild before docker: git's error, a hint, exit 1" {
+    echo 1 > "$SHIMS/git_status"
+    start --rebuild
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"fatal: Not possible to fast-forward, aborting."* ]]
+    [[ "$output" == *"git pull --ff-only failed, so nothing was rebuilt"* ]]
+    no_docker_calls
+}
+
+@test "without --rebuild, and for --rebuild --help, there is no git pull" {
+    start
+    [ "$status" -eq 0 ]
+    [ ! -e "$SHIMS/git.log" ]
+    start --rebuild --help
+    [ "$status" -eq 0 ]
+    [ ! -e "$SHIMS/git.log" ]
 }
 
 @test "--rebuild --docker uses the docker compose file for build and up" {
