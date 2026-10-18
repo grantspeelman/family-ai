@@ -38,6 +38,10 @@ To add a language's checks (PRs 2 and 7), edit the matching step in `lefthook.ym
 
 For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it only runs when dependencies change.
 
+## Testing bash scripts
+
+Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. Existing shell tests are converted in a follow-up; see [plan 14](plans/14-bats-core.md).
+
 ## Workflow safety
 
 Anyone can open a PR against this public repo, so no workflow may run untrusted code with secrets or write access available. Every workflow in `.github/workflows/` follows these rules. A new or changed workflow is checked against them in review, and the `workflows` CI job checks the mechanical ones.
@@ -71,7 +75,7 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 - Actions are pinned by full commit SHA with a trailing `# vX.Y.Z` comment (workflow safety rule 6). Dependabot reads that form and updates the SHA and the comment together, as long as the comment is on the same line. Keep that format or updates stop applying cleanly.
 - Dependabot PRs run the `ci` workflow as fork-like runs: a read-only `GITHUB_TOKEN` and no Actions secrets (GitHub's docs: [troubleshooting Dependabot on GitHub Actions](https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions), checked 2026-10-14). No workflow here uses a secret (rule 3; the `workflows` job fails on any `secrets` reference) and the top-level permission is `contents: read`, so they run unchanged. This holds for every Dependabot-triggered `push`, `pull_request` and `schedule` run, not just PRs. Dependabot secrets are a separate store that this repo does not use, so nothing here should reach for `secrets.` in a Dependabot-triggered job.
 - The `docker` entry only covers the `FROM` line. Dependabot does not touch the version and SHA-256 pins in `ARG` and `ENV` lines, or in workflow `env:`. These stay **manually maintained**, so nobody should assume they are covered:
-  - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, in `.devcontainer/Dockerfile`.
+  - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, `BATS_VERSION` and `BATS_SHA256`, in `.devcontainer/Dockerfile`.
   - `CST_VERSION` and `CST_SHA256` in the `image` job of `.github/workflows/devcontainer-ci.yml`.
   - `ACTIONLINT_VERSION` and `ACTIONLINT_SHA256` in the `workflows` job of the same file.
   - Packages installed from the Ubuntu archive follow the base image and are not pinned.

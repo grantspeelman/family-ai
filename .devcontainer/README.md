@@ -136,7 +136,9 @@ this mode.
 ## Changing the image
 
 The image is `ubuntu:26.04`. Most tools come from Ubuntu's archive; `gh` and
-`gitleaks` are too old there, so they're checksummed release binaries.
+`gitleaks` are too old there, so they're checksummed release binaries. `lefthook`
+is a checksummed binary too, and `bats-core` (the bash test runner) is a
+checksummed source tarball installed with its own `install.sh`.
 
 `container-structure-test.yaml` is the spec for the image. Each pinned tool has
 a version test there, so when you bump a pin in the `Dockerfile` (version and
