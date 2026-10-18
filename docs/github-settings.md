@@ -1,6 +1,6 @@
 # GitHub settings checklist
 
-The repo owner applies these settings in GitHub. A PR cannot apply them. This page covers the CI gate, fork PR approval, secret scanning, Dependabot and CodeQL. Other plans add their own sections.
+The repo owner applies these settings in GitHub. A PR cannot apply them. This page covers the CI gate, fork PR approval, secret scanning, Dependabot and CodeQL.
 
 ## Require the CI gate before merging to `main`
 

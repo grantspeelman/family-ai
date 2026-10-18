@@ -26,7 +26,6 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 
 | Path | What |
 | --- | --- |
-| `docs/plans/` | One plan per PR. `docs/plans/README.md` has the sequence and the format. |
 | `first-build-pr-sequence.md` in the repo root | The overall PR sequence and its working notes. |
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
 | `.env.example` | Names of host environment variables the container reads, without values. Real `.env` files are gitignored and never committed. |

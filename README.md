@@ -37,7 +37,6 @@ family-ai is being built the careful way round: guardrails first, house second. 
 | If you want... | Read |
 | --- | --- |
 | The plan for the whole build | [first-build-pr-sequence.md](first-build-pr-sequence.md) |
-| One plan per PR | [docs/plans/](docs/plans/README.md) |
 | The house rules (for humans and agents) | [AGENTS.md](AGENTS.md) and [docs/conventions.md](docs/conventions.md) |
 | A dev environment | [.devcontainer/README.md](.devcontainer/README.md) |
 
