@@ -45,7 +45,7 @@ shares, so it survives rebuilds and covers both entry points.
 |---|---|
 | **Files** | Only this checkout, at `/workspace`. No host home directory, `~/.ssh` or `~/.claude`. |
 | **SSH** | Your host ssh-agent, forwarded as a socket. `start.sh` starts an agent and runs `ssh-add` if it needs to. The container can use your key to sign, but it can't read or copy the key. GitHub's host keys are pinned in the image. |
-| **GitHub API** | A fine-grained token for this repo only. It comes from a file on the host, outside the repo. See [GitHub token](#github-token). |
+| **GitHub API** | A fine-grained token for this repo only, plus an optional classic token with only the `project` scope for the `/factory` board. They come from a file on the host, outside the repo. See [GitHub token](#github-token). |
 | **Claude** | Its own config (the volume above), with `permissions.defaultMode = bypassPermissions`. Your host Claude settings are untouched. |
 | **Network** | Outbound access is not filtered. |
 
@@ -54,9 +54,9 @@ Inside the container the `vscode` user has passwordless `sudo`.
 ## GitHub token
 
 The token comes from a file on the host, outside the repo:
-`~/.config/family-ai/gh.env`, a single line `GH_TOKEN=<token>`. Compose reads it
-through `env_file` in `docker-compose.yml`, so `start.sh` and VS Code use the
-same file. The file is optional: without it the container starts and `gh` is
+`~/.config/family-ai/gh.env`, a line `GH_TOKEN=<token>` and an optional second
+line `GH_PROJECT_TOKEN=<token>`. Compose reads it through `env_file` in
+`docker-compose.yml`, so `start.sh` and VS Code use the same file. The file is optional: without it the container starts and `gh` is
 unauthenticated. The long `env_file` form needs Docker Compose 2.24 or newer.
 A `GH_TOKEN` exported in your shell or placed in `.devcontainer/.env` is no
 longer passed into the container; use the file. `${HOME}` is expanded by
@@ -86,10 +86,30 @@ mkdir -p ~/.config/family-ai && chmod 700 ~/.config/family-ai
 
 The directory should be mode 700 and the file mode 600; `start.sh` warns if not.
 
-**Renew every 30 days.** Create a new token, rewrite the file with the command
-above, restart with `.devcontainer/start.sh`, then delete the old token on
-GitHub. The container takes its environment when it is created, so it must be
-restarted after a rotation (for VS Code, rebuild or reopen the container).
+**Project token (optional).** Only the `/factory` board needs it: fine-grained
+tokens can't reach a user-owned GitHub Project, so `gh project` commands use this
+one instead. Create a classic token (Developer settings, Personal access tokens,
+Tokens (classic)) with only the `project` scope and a 30-day expiry, and don't
+authorise it for any SSO organisation. The first time, append it to the same
+file (renewal uses the replace command below):
+
+```sh
+(umask 077; read -rs T && printf 'GH_PROJECT_TOKEN=%s\n' "$T" >> ~/.config/family-ai/gh.env; unset T)
+```
+
+**Renew every 30 days.** The tokens expire on their own dates, so each renews
+alone. Create the new token, then run its command, which replaces only its line:
+
+```sh
+# GH_TOKEN
+(umask 077; f=~/.config/family-ai/gh.env; grep -v '^GH_TOKEN=' "$f" > "$f.new"; read -rs T && printf 'GH_TOKEN=%s\n' "$T" >> "$f.new" && mv "$f.new" "$f"; unset T)
+# GH_PROJECT_TOKEN
+(umask 077; f=~/.config/family-ai/gh.env; grep -v '^GH_PROJECT_TOKEN=' "$f" > "$f.new"; read -rs T && printf 'GH_PROJECT_TOKEN=%s\n' "$T" >> "$f.new" && mv "$f.new" "$f"; unset T)
+```
+
+Restart with `.devcontainer/start.sh`, then delete the old token on GitHub. The
+container takes its environment when it is created, so it must be restarted
+after a rotation (for VS Code, rebuild or reopen the container).
 
 If the file is missing, `start.sh` warns that `gh` will be unauthenticated and
 points here.

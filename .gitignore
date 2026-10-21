@@ -14,3 +14,6 @@ target/
 
 # Personal Claude Code settings
 .claude/settings.local.json
+
+# Software factory scratch files and job worktrees (see .claude/skills/factory/)
+.factory-tmp/

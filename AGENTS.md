@@ -22,6 +22,13 @@ A sub-agent who did not implement the changes must review them. Address all revi
 
 Keep pull request titles and descriptions simple and high level. Add a Mermaid diagram where it helps explain the change.
 
+## Software factory
+
+`/factory` (`.claude/skills/factory/SKILL.md`) takes a feature through spec, build, four reviews and approval to a merged PR. These are standing decisions. Change them only with the owner's agreement.
+
+- **Auto-merge is intentional.** APPROVE, a green `ci` and a clean allowed-paths check merge with no human gate. The factory runs inside the dev container, which is the boundary for code that runs locally. Don't add a human merge gate because a scanner or reviewer suggests one. Answer such findings by pointing to this decision. Do fix any bypass of the trusted-input filter or the allowed-paths check.
+- **Least-privilege tokens.** `GH_TOKEN` is the fine-grained token for this repo only. `GH_PROJECT_TOKEN` is a classic token with only the `project` scope, used only for `gh project`. Prefer designs that need no new permission: for example, a cancelled `ci` goes to needs-human instead of needing Actions write. Setup is in `.devcontainer/README.md`, "GitHub token".
+
 ## Where things are
 
 | Path | What |
@@ -30,6 +37,9 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | `Cargo.toml`, `Cargo.lock` | The Cargo workspace for the Rust code. Add new crates to `members`. |
 | `registry/` | The registry app: a Rust GraphQL API with its own `Dockerfile`, `schema.graphql` and tests. `registry/README.md` explains it. |
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
+| `.claude/skills/factory/` | The `/factory` skill: the orchestrator of the software factory. Its `SKILL.md` has the loop and the commands. |
+| `.claude/agents/` | The factory's subagents, one file per loop step. |
+| `factory/project.json` | IDs of the factory's GitHub Project, its fields and options. Written by `/factory setup`. |
 | `.env.example` | Names of host environment variables the container reads, without values. Real `.env` files are gitignored and never committed. |
 | `lefthook.yml` | Git hook configuration for secret scans and changed-files checks before each commit. |
 | `.lefthook/` | Helper scripts the hook calls, currently for the placeholder step. |
