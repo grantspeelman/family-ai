@@ -39,6 +39,7 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
 | `.claude/skills/factory/` | The `/factory` skill: the orchestrator of the software factory. Its `SKILL.md` has the loop and the commands. |
 | `.claude/agents/` | The factory's subagents, one file per loop step. |
+| `.claude/hooks/`, `.claude/settings.json` | The SessionStart hook for Claude Code on the web, and the settings that register it. It fetches crates and builds the workspace. It does nothing outside a cloud session. |
 | `factory/project.json` | IDs of the factory's GitHub Project, its fields and options. Written by `/factory setup`. |
 | `.env.example` | Names of host environment variables the container reads, without values. Real `.env` files are gitignored and never committed. |
 | `lefthook.yml` | Git hook configuration for secret scans and changed-files checks before each commit. |

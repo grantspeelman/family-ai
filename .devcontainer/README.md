@@ -183,4 +183,5 @@ files in temp dirs (including symlinks). It needs no Docker: run it with
 tracked `*.bats` file, automatically.
 
 Besides that, `start.bats`, `post-start.bats` and `entrypoint.bats` test the
-scripts here, and `.lefthook/placeholder.bats` the hook helper, with shimmed commands.
+scripts here, `.lefthook/placeholder.bats` the hook helper, and
+`.claude/hooks/session-start.bats` the SessionStart hook, with shimmed commands.
