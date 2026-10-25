@@ -35,9 +35,9 @@ Also in PR 0:
 | # | PR | Notes |
 | --- | --- | --- |
 | 1 | Scaffold the registry app | Done (merged). Empty GraphQL schema, deployable. No logic yet. |
-| 2 | Registry app tooling | Linting, duplication detection, complexity detection, coverage reporting, a dependency license check against the AGPL-compatible allowlist, wired into CI. Likely splits into separate PRs per tool — size each by how much judgement it needs from Gman. |
-| 3 | Account creation mutation | Minimal — email or family name, stored in the registry's own metadata store. No Fly integration yet. |
-| 4 | Fly mock service | Imitates the create-app, create-volume, create-Machine endpoints. Actually boots the real family Rust app as its "Machine" and hands back its address. No Firecracker — API shape only. Likely splits into the mock API shell first, then wiring it to actually spawn the family app. |
+| 2 | Workspace tooling | Linting, duplication detection, complexity detection, coverage reporting, a dependency license check against the AGPL-compatible allowlist, wired into CI. Split into #45–#49, one job per tool. |
+| 3 | Account creation mutation | Minimal — email and family name, stored in the registry's own metadata store. No Fly integration yet. |
+| 4 | Fly mock service | Imitates the create-app, create-volume, create-Machine endpoints. Actually boots the real family Rust app as its "Machine" and hands back its address. No Firecracker — API shape only. Split into #50, #54 and #59: the crate skeleton, the API endpoints, then wiring it to actually spawn the family app. |
 | 5 | Fly integration on the registry | Account creation calls the mock's API to create the family's app, volume and Machine. Swapping the mock for real Fly later shouldn't change this code, only the base URL. |
 | 6 | Scaffold the Rust family app | Boots, connects to SQLite on its volume, runs migrations, creates the table. |
 | 7 | Family app tooling | Folded into PR 2. The tooling is workspace-wide, so the family app is covered when it joins the workspace. |
@@ -59,7 +59,7 @@ PRs 2–9 are queued on the factory board as issues #45–#62. Each spec opens w
 
 - Tooling is workspace-wide and set up once. PR 7 is folded into PR 2.
 - clippy + rustfmt and `cargo-deny` are strict gates and block feature work. Coverage, duplication and complexity fail only past generous thresholds and run alongside feature work. Tighten them later with real data.
-- Plumbing is split from logic. Crate skeletons, dependency additions and CI wiring land in small PRs a human skims and merges. Each crate skeleton also widens the factory's allowed paths for that crate's `src/`, `tests/` and README, so follow-up jobs stay inside them.
+- Plumbing is split from logic. Crate skeletons, dependency additions and CI wiring land in small PRs a human skims and merges. Each crate skeleton also widens the factory's allowed paths for that crate's `src/`, `tests/` and README, plus `migrations/*.sql` for apps with a database, so follow-up jobs stay inside them.
 - API contracts and data handling stay in small PRs that get a close human read. The approver escalates them.
 - One SQLite stack for the workspace: `sqlx`, with migrations as `.sql` files under each app's `migrations/`.
 - Accounts take an email and a family name. The email is unique, ignoring letter case. Keycloak is the planned identity provider and comes later; the account store is shaped so its subject id can take over the identity. Until auth exists, the polling query `accountStatus` returns only status and address, never personal data.
@@ -138,14 +138,14 @@ Real Fly needs a later job that waits for a Machine to start, since real Fly ret
 
 ## Working notes: sizing and splitting PRs
 
-Before starting any PR flagged above as a likely bundle, pause and break it down live rather than pre-deciding the exact cut up front.
+Before starting a PR that bundles several pieces of work, pause and break it down live rather than pre-deciding the exact cut up front. PRs 2 and 4 were broken down this way into the factory jobs above.
 
 Size each resulting PR by how much of Gman's attention it actually needs, not by a fixed line count:
 
 - Boilerplate-heavy, low-judgement work (scaffolding, generated tooling config) can run bigger — it's skimmed, not read closely.
 - Anything with real judgement calls — API contracts, data handling, security-adjacent code — stays small enough to read closely, line by line.
 
-This rule applies as a standing step throughout the build, not just at the two flagged bundles (PR 2 and PR 4).
+This rule applies as a standing step throughout the build, not just at the two bundles already broken down (PR 2 and PR 4).
 
 ## Licensing
 
