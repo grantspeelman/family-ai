@@ -32,6 +32,8 @@ What changed, in a few bullets.
 
 Acceptance criteria: each one met or not, and the test that covers it.
 
+Departures: any detail of the spec you changed to meet its Goal, what changed and why, or "none".
+
 Tests: the commands you ran and a one-line result each (e.g. "12 passed, 0 failed"). Summarise; never paste full logs.
 
 From round 2: how you addressed each CHANGES item, CI failure or rework note.
