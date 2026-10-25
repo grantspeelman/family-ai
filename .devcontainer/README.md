@@ -141,10 +141,11 @@ The image ships `lefthook`, `gitleaks`, `actionlint` and `zizmor`, and `postStar
 the git hooks. The hook configuration (`lefthook.yml`) runs `gitleaks` on
 staged changes before every commit made inside the container. It also runs
 `actionlint` (with shellcheck) and `zizmor --offline --persona=pedantic` on staged workflow files
-(`.github/workflows/*.{yml,yaml}`), skipping both for unrelated files, plus
-changed-files steps for lint, tests, duplication and complexity, and
-`cargo-deny` (placeholders until the tools are installed; see
-`docs/conventions.md`). A commit that contains a secret is blocked and the
+(`.github/workflows/*.{yml,yaml}`), skipping both for unrelated files,
+`cargo fmt` and `cargo clippy` on the whole Cargo workspace when a `*.rs`,
+`Cargo.toml` or `Cargo.lock` file is staged, plus changed-files steps for
+tests, duplication and complexity, and `cargo-deny` (placeholders until the
+tools are installed; see `docs/conventions.md`). A commit that contains a secret is blocked and the
 finding is redacted in the output.
 
 Commits made outside the container skip the hook (git prints "Can't find
