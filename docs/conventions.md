@@ -31,7 +31,7 @@ The hook is configured in `lefthook.yml`. It is a fast local check on the files 
 
 Steps run in order and stop at the first failure. Each step gets only the staged files matching its glob, through `{staged_files}`, not the whole tree. `{staged_files}` covers added, copied, modified and renamed files; deleted files are not passed.
 
-To add a language's checks (PRs 2 and 7), edit the matching step in `lefthook.yml`:
+To add a language's checks (PR 2), edit the matching step in `lefthook.yml`:
 
 1. Set the step's `glob` to the language's files (for example `"*.rs"`), if the placeholder's glob is not right.
 2. Replace `.lefthook/placeholder.sh ...` in `run` with the real command, passing `{staged_files}` when the tool accepts file arguments. Tools that must see the whole project (a test run, say) can ignore the file list but should still be scoped by the glob so they only run when that language changed.
@@ -138,7 +138,7 @@ Size a PR by how much human attention it needs, not by a fixed line count.
 
 - Boilerplate-heavy, low-judgement work (scaffolding, generated tooling config) may be larger. It is skimmed.
 - Work with real judgement calls stays small and is read line by line: API contracts, data handling, security-adjacent code.
-- This rule applies to every PR. The two PRs flagged as likely bundles (PR 2, registry app tooling, and PR 7, family app tooling) are broken down live before starting, not pre-cut.
+- This rule applies to every PR. The flagged bundles (PR 2, tooling, and PR 4, the Fly mock) were broken down into factory jobs; see `first-build-pr-sequence.md`.
 
 ## Licensing
 
@@ -162,8 +162,7 @@ Scope: dependencies linked into shipped code. Dev tooling (linters, coverage, CI
 
 Planned checks (none exist yet):
 
-- Registry app: also Rust, so `cargo-deny` with a license allowlist, added in PR 2.
-- Family app: `cargo-deny` with a license allowlist, in CI (PR 7). The pre-commit hook also runs it when dependencies change.
+- `cargo-deny` with a license allowlist will cover every crate in the workspace, in CI and in the pre-commit hook when dependencies change. Arrives in PR 2 (#46).
 
 Open items:
 
