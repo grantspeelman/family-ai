@@ -47,7 +47,7 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | `docs/README.md` | What belongs in `docs/` and what may be committed there. |
 | `docs/github-settings.md` | GitHub settings the owner applies by hand. Covers branch protection, fork PR approval, secret scanning and push protection, Dependabot alerts and security updates, and CodeQL default setup. |
 
-The registry app is a scaffold so far: one query and a health check. Language and framework rules arrive with the PRs that introduce those stacks (the registry app's tooling in PR 2, the family app's in PR 7).
+The registry app is a scaffold so far: one query and a health check. The workspace-wide Rust tooling arrives in PR 2 (issues #45–#49) and covers every crate. The backlog is in `first-build-pr-sequence.md`.
 
 ## Running the checks
 

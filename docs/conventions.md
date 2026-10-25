@@ -138,7 +138,7 @@ Size a PR by how much human attention it needs, not by a fixed line count.
 
 - Boilerplate-heavy, low-judgement work (scaffolding, generated tooling config) may be larger. It is skimmed.
 - Work with real judgement calls stays small and is read line by line: API contracts, data handling, security-adjacent code.
-- This rule applies to every PR. The two PRs flagged as likely bundles (PR 2, registry app tooling, and PR 7, family app tooling) are broken down live before starting, not pre-cut.
+- This rule applies to every PR. The flagged bundles (PR 2, tooling, and PR 4, the Fly mock) were broken down into factory jobs; see `first-build-pr-sequence.md`.
 
 ## Licensing
 
@@ -162,8 +162,7 @@ Scope: dependencies linked into shipped code. Dev tooling (linters, coverage, CI
 
 Planned checks (none exist yet):
 
-- Registry app: also Rust, so `cargo-deny` with a license allowlist, added in PR 2.
-- Family app: `cargo-deny` with a license allowlist, in CI (PR 7). The pre-commit hook also runs it when dependencies change.
+- `cargo-deny` with a license allowlist covers every crate in the workspace, in CI and in the pre-commit hook when dependencies change. Added in PR 2.
 
 Open items:
 
