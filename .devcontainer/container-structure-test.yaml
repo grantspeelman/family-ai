@@ -142,7 +142,7 @@ commandTests:
   - name: cargo-deny is 0.20.2 (CARGO_DENY_VERSION)
     command: cargo-deny
     args: ["--version"]
-    expectedOutput: ['^cargo-deny 0\.20\.2$']
+    expectedOutput: ['^cargo-deny 0\.20\.2\r?\n?$']
 
   - name: shellcheck installed (actionlint shell checks)
     command: shellcheck
