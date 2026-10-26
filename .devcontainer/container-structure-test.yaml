@@ -6,7 +6,7 @@
 # Image design:
 #   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite, gosu and Docker come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
-#     gh, gitleaks, lefthook, actionlint, zizmor and bats-core are pinned, checksummed downloads, pinned exactly.
+#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny and bats-core are pinned, checksummed downloads, pinned exactly.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
 #   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
@@ -138,6 +138,11 @@ commandTests:
     command: zizmor
     args: ["--version"]
     expectedOutput: ['^zizmor 1\.31\.1']
+
+  - name: cargo-deny is 0.20.2 (CARGO_DENY_VERSION)
+    command: cargo-deny
+    args: ["--version"]
+    expectedOutput: ['^cargo-deny 0\.20\.2\r?\n?$']
 
   - name: shellcheck installed (actionlint shell checks)
     command: shellcheck

@@ -1,14 +1,15 @@
 # Installed into .git/hooks by .devcontainer/postStartCommand.sh.
 #
-# Every step runs only on the staged files that match its glob, passed in as
-# {staged_files}. A step with no matching files is skipped. A step that exits
-# non-zero blocks the commit. Steps run one after another and stop at the first
+# Steps run when staged files match their glob. File-based tools receive
+# {staged_files}; Rust lint and cargo-deny check the workspace. No matches skips a step.
+# A step that exits non-zero blocks the commit. Steps run one after another and stop at the first
 # failure (piped: true).
 #
 # Real checks: gitleaks on every commit, Rust lint (cargo fmt and clippy) when
-# Rust or Cargo files are staged, and actionlint plus zizmor on staged workflows.
+# Rust or Cargo files are staged, cargo-deny on manifest or lockfile changes,
+# and actionlint plus zizmor on staged workflows.
 # Steps marked PLACEHOLDER call .lefthook/placeholder.sh, which prints that no
-# check ran; the Rust test, duplication, complexity and cargo-deny steps are still
+# check ran; the Rust test, duplication and complexity steps are still
 # placeholders. Other file types are checked by the secret scan only and skipped
 # by other steps. {staged_files} covers added, copied, modified and renamed files;
 # deleted files are not passed.
@@ -37,10 +38,10 @@ pre-commit:
       glob: "*.rs"
       run: .lefthook/placeholder.sh duplication-and-complexity "PR 7" {staged_files}
 
-    # PLACEHOLDER until PR 7 installs cargo-deny. Runs only when a manifest or lockfile changes.
+    # Check the workspace's dependencies when a manifest or lockfile changes.
     5-cargo-deny:
       glob: "{Cargo.toml,Cargo.lock,**/Cargo.toml,**/Cargo.lock}"
-      run: .lefthook/placeholder.sh cargo-deny "PR 7" {staged_files}
+      run: cargo deny --locked check
 
     6-actionlint:
       glob: ".github/workflows/*.{yml,yaml}"

@@ -6,31 +6,30 @@ Standing rules for every PR in this build. `AGENTS.md` is the entry point and co
 
 ## What is enforced today
 
-The pre-commit hook runs gitleaks on staged changes, cargo fmt and clippy on the Rust workspace when Rust or Cargo files are staged, and actionlint plus zizmor on staged workflow files. CI scans the full history for secrets, checks all workflows and runs cargo fmt and clippy on the whole workspace on every PR and push to main. The hook also carries placeholder application checks (Rust tests, duplication, complexity and cargo-deny) that check nothing until their tools are installed.
+The pre-commit hook runs gitleaks on staged changes, cargo fmt and clippy on the Rust workspace when Rust or Cargo files are staged, actionlint plus zizmor on staged workflow files, and cargo-deny when a manifest or lockfile changes. CI scans the full history for secrets, checks all workflows and runs cargo fmt, clippy and cargo-deny on the whole workspace on every PR and push to main. The hook also carries placeholder application checks (Rust tests, duplication and complexity) that check nothing until their tools are installed.
 
-Coverage gap: Rust (`*.rs`, `Cargo.toml`, `Cargo.lock`) and workflow files have real lint checks in the hook; Rust tests, duplication, complexity and cargo-deny are still placeholders until the later PR 2 jobs and PR 7 install them. Other files are checked by the secret scan only.
+Coverage gap: Rust (`*.rs`, `Cargo.toml`, `Cargo.lock`) and workflow files have real lint checks in the hook; Rust tests, duplication and complexity are still placeholders until the later PR 2 jobs and PR 7 install them. Other files are checked by the secret scan only.
 
 | Rule | Enforced by | Status |
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
 | Rust lint: `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --locked -- -D warnings` | Pre-commit hook (`2-lint`, when a `*.rs`, `Cargo.toml` or `Cargo.lock` file is staged) and CI (`image` job, steps "cargo fmt" and "cargo clippy", inside the `ci` gate) | Enforced today on the whole Cargo workspace, so a crate added to `members` is covered with no change. CI runs both commands in the dev container image the `image` job builds, which has Rust 1.93 with clippy and rustfmt. Default lints and formatting, no `clippy.toml` or `rustfmt.toml` |
 | Tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place; steps are placeholders until the later PR 2 jobs and PR 7 |
-| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place. It covers the container checks, the workflow safety lint, the full-history secret scan, the Rust workspace lint and the registry app's tests and image. Duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place. It covers the container checks, the workflow safety lint, the full-history secret scan, the Rust workspace lint, the registry app's tests and image, and workspace dependency checks. Duplication and complexity jobs do not exist yet; each arrives with its stack PR (PRs 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | Pre-commit hook and CI (`workflows` job): actionlint and zizmor | Enforced for staged workflows locally and all workflows in CI. Automated coverage and remaining reviewer checks are listed below. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Bash script tests (`*.bats`) | CI (`image` job, step "Bats tests", inside the `ci` gate) | Workflow in place. Finds every tracked `*.bats` file with `git ls-files` and runs them in the built image; fails if none are found. Not run by the pre-commit hook |
 | Registry app tests and image | CI (`registry` job, inside the `ci` gate) | Workflow in place. Runs `cargo test --locked` in the Dockerfile's Rust `toolchain` stage, builds `registry/Dockerfile`, starts the image and queries `/healthz` and `/graphql`. Not run by the pre-commit hook |
 | Dependabot version updates | `.github/dependabot.yml` | Config in place for GitHub Actions, Cargo, the dev container's `FROM` image and the registry app's `FROM` images. Alerts and security updates are repo settings, the owner's action: [docs/github-settings.md](github-settings.md) |
 | CodeQL analysis | GitHub code scanning, default setup (a repo setting, no workflow file) | On, analysing `actions` and `python` on PRs, pushes to `main` and weekly. Not a required check and not in the `ci` gate's `needs:`. Owner's setting: [docs/github-settings.md](github-settings.md#code-scanning-codeql) |
-| Dependency license check, registry app (Rust, `cargo-deny`) | CI | PR 2, not yet |
-| Dependency license check, family app (Rust, `cargo-deny`) | CI, and the hook when dependencies change | Hook step is a placeholder; real check in PR 7, not yet |
+| Workspace dependencies: licenses, advisories, bans and sources (`cargo-deny`) | CI (`cargo-deny` job, inside the `ci` gate), and the hook when a manifest or lockfile changes | Enforced for every workspace member, including future crates, by root `deny.toml` |
 
 ## Pre-commit hook: what passing means, and adding a language
 
-The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint, the full-history secret scan, the Rust workspace lint and the registry app's tests and image.
+The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint, the full-history secret scan, the Rust workspace lint, the registry app's tests and image, and workspace dependency checks.
 
-**Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders. The Rust lint step is real: it checks the whole workspace as it is on disk, so unstaged edits to Rust files count too.
+**Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that tests, duplication or complexity were checked until the real steps replace the placeholders. The dependency checks use the real cargo-deny step. The Rust lint step is real: it checks the whole workspace as it is on disk, so unstaged edits to Rust files count too.
 
-Steps run in order and stop at the first failure. Each step gets only the staged files matching its glob, through `{staged_files}`, not the whole tree. `{staged_files}` covers added, copied, modified and renamed files; deleted files are not passed.
+Steps run in order and stop at the first failure. File-based steps get only the staged files matching their glob through `{staged_files}`. Rust lint and cargo-deny check the whole workspace when their glob matches. `{staged_files}` covers added, copied, modified and renamed files; deleted files are not passed.
 
 To add a language's checks (PR 2), edit the matching step in `lefthook.yml`:
 
@@ -39,7 +38,7 @@ To add a language's checks (PR 2), edit the matching step in `lefthook.yml`:
 3. Keep the step fast; the hook only helps if it is not skipped. Anything slow belongs in CI.
 4. Delete the `# PLACEHOLDER` comment above the step, and update the table above and the "Running the checks" section of `AGENTS.md`.
 
-For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it only runs when dependencies change.
+For `cargo-deny`, the step's glob matches root and nested `Cargo.toml` and `Cargo.lock` files. It runs `cargo deny --locked check` against the workspace rather than taking individual filenames. Run that command from the repo root to check licenses, RustSec advisories (including unmaintained and yanked crates), bans and sources. `.lefthook/cargo-deny.bats` tests hook selection and commit rejection; `.lefthook/cargo-deny-policy.bats` tests the license allowlist against local fixture crates.
 
 ## Testing bash scripts
 
@@ -88,9 +87,10 @@ Repo settings for fork PRs are the owner's to apply: see [docs/github-settings.m
 - Actions are pinned by full commit SHA with a trailing `# vX.Y.Z` comment (workflow safety rule 6). Dependabot reads that form and updates the SHA and the comment together, as long as the comment is on the same line. Keep that format or updates stop applying cleanly.
 - Dependabot PRs run the `ci` workflow as fork-like runs: a read-only `GITHUB_TOKEN` and no Actions secrets (GitHub's docs: [troubleshooting Dependabot on GitHub Actions](https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions), checked 2026-10-14). No workflow here uses a secret (rule 3; reviewers check references and their reasons) and the top-level permission is `contents: read`, so they run unchanged. This holds for every Dependabot-triggered `push`, `pull_request` and `schedule` run, not just PRs. Dependabot secrets are a separate store that this repo does not use, so nothing here should reach for `secrets.` in a Dependabot-triggered job.
 - The `docker` entries only cover the `FROM` lines. Dependabot does not touch the version and SHA-256 pins in `ARG` and `ENV` lines, or in workflow `env:`. These stay **manually maintained**, so nobody should assume they are covered:
-  - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, `BATS_VERSION` and `BATS_SHA256`, plus `ACTIONLINT_VERSION` and `ZIZMOR_VERSION` and their architecture-specific checksums, in `.devcontainer/Dockerfile`.
+  - `GH_VERSION` and its checksums, `GITLEAKS_VERSION` and its checksums, `LEFTHOOK_VERSION` and its checksums, `BATS_VERSION` and `BATS_SHA256`, plus `ACTIONLINT_VERSION`, `ZIZMOR_VERSION` and `CARGO_DENY_VERSION` and their architecture-specific checksums, in `.devcontainer/Dockerfile`.
   - `CST_VERSION` and `CST_SHA256` in the `image` job of `.github/workflows/devcontainer-ci.yml`.
   - `ACTIONLINT_VERSION`, `ACTIONLINT_SHA256`, `ZIZMOR_VERSION` and `ZIZMOR_SHA256` in the `workflows` job of the same file.
+  - `CARGO_DENY_VERSION` and `CARGO_DENY_SHA256` in the `cargo-deny` job of the same file. The 0.20.2 amd64 and arm64 pins come from the [published release checksums](https://github.com/EmbarkStudios/cargo-deny/releases/tag/0.20.2).
   - Packages installed from the Ubuntu archive follow the base image and are not pinned.
 
   When bumping one by hand, take the new SHA-256 from the project's published checksums (workflow safety rule 6). There is no automation for this yet.
@@ -155,15 +155,16 @@ Disallowed:
 
 - GPL-2.0-only
 - Proprietary libraries
-- Source-available licenses with usage restrictions: SSPL, BSL, Elastic, FSL, O'Saasy
+- Source-available licenses with usage restrictions: SSPL, BUSL (Business Source), Elastic, FSL, O'Saasy. `BSL-1.0` means the permissive Boost license, not Business Source; it is not currently needed or allowed by `deny.toml`
 
 Licenses on neither list (LGPL, MPL, GPL-3.0 and so on): not yet decided. Ask the user before adding such a dependency.
 
 Scope: dependencies linked into shipped code. Dev tooling (linters, coverage, CI) is not linked into shipped code and is out of scope.
 
-Planned checks (none exist yet):
+Enforced checks:
 
-- `cargo-deny` with a license allowlist will cover every crate in the workspace, in CI and in the pre-commit hook when dependencies change. Arrives in PR 2 (#46).
+- Root `deny.toml` explicitly allows permissive SPDX licenses, including `Unicode-3.0` and `Apache-2.0 WITH LLVM-exception`. All other licenses fail. Only unpublished workspace crates are exempted for their own AGPL license; AGPL is not allowed for third-party dependencies.
+- `cargo deny --locked check` covers every workspace crate in CI and in the pre-commit hook when a manifest or lockfile changes. RustSec vulnerabilities, unmaintained or unsound advisories, and yanked crates fail; any future ignored advisory needs a written reason. Duplicate transitive versions warn because their version requirements are controlled upstream; wildcard dependencies and unknown registries or git sources fail.
 
 Open items:
 

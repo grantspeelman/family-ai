@@ -13,6 +13,12 @@ setup() {
     git config commit.gpgsign false
     git config core.hooksPath .git/hooks
     cp "$REPO_ROOT/lefthook.yml" .
+    # Dependency checks share the manifest glob. Keep these lint tests offline;
+    # cargo-deny.bats and cargo-deny-policy.bats cover that step separately.
+    mkdir -p bin
+    printf '#!/bin/sh\nexit 0\n' > bin/cargo-deny
+    chmod +x bin/cargo-deny
+    export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
     # Later placeholder steps share the *.rs glob and call this script.
     mkdir -p .lefthook
     cp "$REPO_ROOT/.lefthook/placeholder.sh" .lefthook/

@@ -1,0 +1,37 @@
+# Apply to all workspace members, features and targets, including future crates.
+[graph]
+all-features = true
+
+[advisories]
+db-urls = ["https://github.com/RustSec/advisory-db"]
+yanked = "deny"
+unmaintained = "all"
+unsound = "all"
+# No advisory or yanked-crate exceptions. Any future ignore needs a reason.
+ignore = []
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    "MIT", # Permissive, used throughout the current dependency graph.
+    "Apache-2.0", # Permissive patent-grant alternative to MIT in many crates.
+    "Apache-2.0 WITH LLVM-exception", # Permissive LLVM exception used by wasi.
+    "BSD-2-Clause", # Permissive two-clause BSD variant.
+    "BSD-3-Clause", # Permissive three-clause BSD variant.
+    "ISC", # Permissive MIT-like license.
+    "Unicode-3.0", # Permissive Unicode data license, used by unicode-ident.
+]
+
+[licenses.private]
+# Our unpublished workspace crates use AGPL; do not allow it for dependencies.
+ignore = true
+
+[bans]
+# Transitive dependency versions are controlled upstream; report duplicates
+# without requiring unrelated dependency migrations to adopt this gate.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

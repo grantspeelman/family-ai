@@ -55,7 +55,7 @@ Write tests first, following TDD, and run the tests for the code you change. Kee
 
 ### On commit
 
-lefthook uses `lefthook.yml` to run gitleaks on staged changes, `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --locked -- -D warnings` when a `*.rs`, `Cargo.toml` or `Cargo.lock` file is staged, and actionlint plus zizmor on staged `.github/workflows/*.{yml,yaml}` files. The Rust lint covers the whole workspace, so fix any fmt or clippy finding before committing (`cargo fmt --all` applies the formatting). The Rust test, duplication, complexity and cargo-deny steps remain placeholders.
+lefthook uses `lefthook.yml` to run gitleaks on staged changes, `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --locked -- -D warnings` when a `*.rs`, `Cargo.toml` or `Cargo.lock` file is staged, and actionlint plus zizmor on staged `.github/workflows/*.{yml,yaml}` files. The Rust lint covers the whole workspace, so fix any fmt or clippy finding before committing (`cargo fmt --all` applies the formatting). Manifest or lockfile changes also run `cargo deny --locked check` for workspace dependency licenses, advisories, bans and sources. Run that command from the repo root to check dependencies manually. The Rust test, duplication and complexity steps remain placeholders.
 
 `.devcontainer/postStartCommand.sh` installs lefthook into `.git/hooks`. Commits made inside the dev container run the hook. Commits outside it skip the hook.
 
