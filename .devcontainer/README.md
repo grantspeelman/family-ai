@@ -145,8 +145,8 @@ staged changes before every commit made inside the container. It also runs
 `cargo fmt` and `cargo clippy` on the whole Cargo workspace when a `*.rs`,
 `Cargo.toml` or `Cargo.lock` file is staged, plus changed-files steps for
 tests, duplication and complexity, and `cargo-deny` (placeholders until the
-tools are installed; see `docs/conventions.md`). A commit that contains a secret is blocked and the
-finding is redacted in the output.
+tools are installed; see `docs/conventions.md`). A commit that contains a
+secret is blocked and the finding is redacted in the output.
 
 Commits made outside the container skip the hook (git prints "Can't find
 lefthook" and lets the commit through), so CI is the backstop for those.

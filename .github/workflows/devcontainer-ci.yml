@@ -71,6 +71,26 @@ jobs:
             -v "$PWD:/repo" -w /repo "$IMAGE" \
             "${bats_files[@]}"
 
+      # cargo fmt and clippy on the whole Cargo workspace, the same commands as the
+      # pre-commit hook's 2-lint step, in the image just built: the dev container's
+      # Rust 1.93 with clippy and rustfmt, so no third-party action sets up Rust.
+      # No -p flags or paths, so a crate added to the workspace's `members` is
+      # covered with no change here. Run as the checkout's owner so target/ is
+      # writable and owned by the runner.
+      - name: cargo fmt
+        run: |
+          docker run --rm --entrypoint cargo --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            fmt --all --check
+
+      - name: cargo clippy
+        run: |
+          docker run --rm --entrypoint cargo --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            clippy --workspace --all-targets --locked -- -D warnings
+
       # Backstop for commits made outside the container, where the lefthook
       # pre-commit hook does not run.
       - name: Secret scan (full history)
@@ -201,38 +221,6 @@ jobs:
           echo "$response"
           jq -e --arg v "$expected" '.data.apiVersion == $v' <<<"$response"
 
-  # cargo fmt and clippy on the whole Cargo workspace, the same commands as the
-  # pre-commit hook's 2-lint step. No -p flags or paths, so a crate added to the
-  # workspace's `members` is covered with no change here. cargo runs in the
-  # registry Dockerfile's `lint` stage: the `toolchain` stage's Rust plus the
-  # clippy and rustfmt components, so no third-party action sets up Rust.
-  rust-lint:
-    name: rust-lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      RUST_LINT_IMAGE: family-ai-rust-lint:ci
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build lint image
-        run: docker build -f registry/Dockerfile --target lint -t "$RUST_LINT_IMAGE" .
-
-      - name: cargo fmt
-        run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
-            -v "$PWD:/repo" -w /repo "$RUST_LINT_IMAGE" \
-            cargo fmt --all --check
-
-      # Run as the checkout's owner so target/ is writable and owned by the runner.
-      - name: cargo clippy
-        run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
-            -v "$PWD:/repo" -w /repo "$RUST_LINT_IMAGE" \
-            cargo clippy --workspace --all-targets --locked -- -D warnings
-
   # The single required status check. Branch protection requires this job's name
   # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
   # a job is gated once it is in that list. `if: always()` makes this job run even
@@ -244,7 +232,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry, rust-lint]
+    needs: [image, smoke, workflows, registry]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

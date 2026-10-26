@@ -19,7 +19,7 @@ pre-commit:
     1-gitleaks:
       run: gitleaks git --pre-commit --staged --redact --no-banner --verbose
 
-    # Rust lint, the same commands as CI's rust-lint job. Runs when a .rs file,
+    # Rust lint, the same commands as CI's image job. Runs when a .rs file,
     # Cargo.toml or Cargo.lock is staged, at any depth. cargo checks the whole
     # workspace as it is on disk, not only the staged files, so every crate in
     # `members` is covered with no change here.
