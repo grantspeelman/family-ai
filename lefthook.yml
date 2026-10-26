@@ -1,16 +1,18 @@
 # Installed into .git/hooks by .devcontainer/postStartCommand.sh.
 #
 # Steps run when staged files match their glob. File-based tools receive
-# {staged_files}; cargo-deny checks the workspace. No matches skips a step.
+# {staged_files}; Rust lint and cargo-deny check the workspace. No matches skips a step.
 # A step that exits non-zero blocks the commit. Steps run one after another and stop at the first
 # failure (piped: true).
 #
+# Real checks: gitleaks on every commit, Rust lint (cargo fmt and clippy) when
+# Rust or Cargo files are staged, cargo-deny on manifest or lockfile changes,
+# and actionlint plus zizmor on staged workflows.
 # Steps marked PLACEHOLDER call .lefthook/placeholder.sh, which prints that no
-# check ran. The .rs steps remain placeholders until their tools are installed;
-# workflows have real lint steps and manifest or
-# lockfile changes run cargo-deny for the workspace. Other types
-# are checked by the secret scan only and skipped by other steps. {staged_files} covers
-# added, copied, modified and renamed files; deleted files are not passed.
+# check ran; the Rust test, duplication and complexity steps are still
+# placeholders. Other file types are checked by the secret scan only and skipped
+# by other steps. {staged_files} covers added, copied, modified and renamed files;
+# deleted files are not passed.
 # To add a language's checks, see docs/conventions.md.
 pre-commit:
   piped: true
@@ -18,10 +20,13 @@ pre-commit:
     1-gitleaks:
       run: gitleaks git --pre-commit --staged --redact --no-banner --verbose
 
-    # PLACEHOLDER until PR 7 installs clippy (PR 2 for the registry app's language).
+    # Rust lint, the same commands as CI's image job. Runs when a .rs file,
+    # Cargo.toml or Cargo.lock is staged, at any depth. cargo checks the whole
+    # workspace as it is on disk, not only the staged files, so every crate in
+    # `members` is covered with no change here.
     2-lint:
-      glob: "*.rs"
-      run: .lefthook/placeholder.sh lint "PR 7" {staged_files}
+      glob: "{*.rs,Cargo.toml,Cargo.lock,**/Cargo.toml,**/Cargo.lock}"
+      run: cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings
 
     # PLACEHOLDER until PR 7 (PR 2 for the registry app).
     3-test:

@@ -15,8 +15,12 @@ setup() {
     export CARGO_DENY_CALLS="$BATS_TEST_TMPDIR/cargo-calls"
     cat > bin/cargo <<'SH'
 #!/bin/sh
-printf '%s\n' "$*" >> "$CARGO_DENY_CALLS"
-exit "${CARGO_DENY_STATUS:-0}"
+# The Rust lint step shares the manifest glob; its behavior has its own tests.
+if [ "$1" = deny ]; then
+    printf '%s\n' "$*" >> "$CARGO_DENY_CALLS"
+    exit "${CARGO_DENY_STATUS:-0}"
+fi
+exit 0
 SH
     chmod +x bin/cargo
     export PATH="$BATS_TEST_TMPDIR/bin:$PATH"

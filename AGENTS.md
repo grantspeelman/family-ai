@@ -42,7 +42,7 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | `factory/project.json` | IDs of the factory's GitHub Project, its fields and options. Written by `/factory setup`. |
 | `.env.example` | Names of host environment variables the container reads, without values. Real `.env` files are gitignored and never committed. |
 | `lefthook.yml` | Git hook configuration for secret scans and changed-files checks before each commit. |
-| `.lefthook/` | Helper scripts the hook calls, currently for the placeholder step. |
+| `.lefthook/` | Helper scripts the hook calls (currently the placeholder steps) and bats tests of the hook. |
 | `.github/workflows/` | CI workflows. Follow the [workflow safety rules](docs/conventions.md#workflow-safety). actionlint and zizmor check workflows in CI and before commits. `.github/dependabot.yml` configures Dependabot version updates. |
 | `docs/README.md` | What belongs in `docs/` and what may be committed there. |
 | `docs/github-settings.md` | GitHub settings the owner applies by hand. Covers branch protection, fork PR approval, secret scanning and push protection, Dependabot alerts and security updates, and CodeQL default setup. |
@@ -55,7 +55,7 @@ Write tests first, following TDD, and run the tests for the code you change. Kee
 
 ### On commit
 
-lefthook uses `lefthook.yml` to run gitleaks on staged changes, actionlint plus zizmor on staged `.github/workflows/*.{yml,yaml}` files, and `cargo deny --locked check` for the workspace when a root or nested `Cargo.toml` or `Cargo.lock` changes. Run `cargo deny --locked check` from the repo root to check dependency licenses, advisories, bans and sources. Other changed-files checks remain placeholders.
+lefthook uses `lefthook.yml` to run gitleaks on staged changes, `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --locked -- -D warnings` when a `*.rs`, `Cargo.toml` or `Cargo.lock` file is staged, and actionlint plus zizmor on staged `.github/workflows/*.{yml,yaml}` files. The Rust lint covers the whole workspace, so fix any fmt or clippy finding before committing (`cargo fmt --all` applies the formatting). Manifest or lockfile changes also run `cargo deny --locked check` for workspace dependency licenses, advisories, bans and sources. Run that command from the repo root to check dependencies manually. The Rust test, duplication and complexity steps remain placeholders.
 
 `.devcontainer/postStartCommand.sh` installs lefthook into `.git/hooks`. Commits made inside the dev container run the hook. Commits outside it skip the hook.
 
