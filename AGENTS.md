@@ -55,7 +55,7 @@ Write tests first, following TDD, and run the tests for the code you change. Kee
 
 ### On commit
 
-lefthook uses `lefthook.yml` to run gitleaks on staged changes and actionlint plus zizmor on staged `.github/workflows/*.{yml,yaml}` files. Other changed-files checks remain placeholders.
+lefthook uses `lefthook.yml` to run gitleaks on staged changes, actionlint plus zizmor on staged `.github/workflows/*.{yml,yaml}` files, and `cargo deny --locked check` for the workspace when a root or nested `Cargo.toml` or `Cargo.lock` changes. Run `cargo deny --locked check` from the repo root to check dependency licenses, advisories, bans and sources. Other changed-files checks remain placeholders.
 
 `.devcontainer/postStartCommand.sh` installs lefthook into `.git/hooks`. Commits made inside the dev container run the hook. Commits outside it skip the hook.
 

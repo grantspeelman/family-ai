@@ -137,6 +137,32 @@ jobs:
       - name: zizmor
         run: zizmor --offline --persona=pedantic .github/workflows/
 
+  # All workspace dependencies: licenses, RustSec advisories, bans and sources.
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CARGO_DENY_VERSION: 0.20.2
+      CARGO_DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-deny
+        run: |
+          tool_dir="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          mkdir -p "$RUNNER_TEMP/cargo-deny"
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/cargo-deny.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/${tool_dir}.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $RUNNER_TEMP/cargo-deny.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/cargo-deny.tar.gz" -C "$RUNNER_TEMP/cargo-deny" --strip-components=1 "$tool_dir/cargo-deny"
+          echo "$RUNNER_TEMP/cargo-deny" >> "$GITHUB_PATH"
+
+      - name: Check workspace dependencies
+        run: cargo deny --locked check
+
   # The registry app: its tests, then the image built from registry/Dockerfile,
   # started and queried over HTTP. cargo runs in the Dockerfile's `toolchain` stage,
   # the Rust image the release build starts from, so the Rust tag is set in one place
@@ -212,7 +238,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry]
+    needs: [image, smoke, workflows, registry, cargo-deny]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

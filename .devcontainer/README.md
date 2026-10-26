@@ -129,8 +129,9 @@ Nothing here is pinned by checksum; the archive's Rust series is what the
 structure test asserts. If you need a newer Rust than the archive offers (a
 crate's MSRV, say), replace `rustc`/`cargo`/`rustfmt`/`rust-clippy` with a pinned,
 SHA-256-checked rustup toolchain in the `Dockerfile` and update the structure test
-in the same commit. The coverage and licence tools planned for PRs 2 and 7
-(`cargo-llvm-cov`, `cargo-deny`) aren't installed yet; add each in its own PR.
+in the same commit. The pinned `cargo-deny` checks workspace dependencies. The
+coverage tool planned for PRs 2 and 7 (`cargo-llvm-cov`) is not installed yet;
+add it in its own PR.
 
 `postStartCommand.sh` runs `cargo fetch --locked` once a root `Cargo.toml`
 exists. There are no backing services: SQLite is a file on the app's volume.
@@ -142,10 +143,10 @@ the git hooks. The hook configuration (`lefthook.yml`) runs `gitleaks` on
 staged changes before every commit made inside the container. It also runs
 `actionlint` (with shellcheck) and `zizmor --offline --persona=pedantic` on staged workflow files
 (`.github/workflows/*.{yml,yaml}`), skipping both for unrelated files, plus
-changed-files steps for lint, tests, duplication and complexity, and
-`cargo-deny` (placeholders until the tools are installed; see
-`docs/conventions.md`). A commit that contains a secret is blocked and the
-finding is redacted in the output.
+changed-files steps for lint, tests, duplication and complexity (placeholders
+until the tools are installed; see `docs/conventions.md`). Manifest or lockfile
+changes run `cargo deny --locked check` for workspace dependencies. A commit
+that contains a secret is blocked and the finding is redacted in the output.
 
 Commits made outside the container skip the hook (git prints "Can't find
 lefthook" and lets the commit through), so CI is the backstop for those.
@@ -160,7 +161,7 @@ this mode.
 ## Changing the image
 
 The image is `ubuntu:26.04`. Most tools come from Ubuntu's archive; `gh` and
-`gitleaks` are too old there, so they're checksummed release binaries. `lefthook`, `actionlint` and `zizmor`
+`gitleaks` are too old there, so they're checksummed release binaries. `lefthook`, `actionlint`, `zizmor` and `cargo-deny`
 are checksummed binaries too, and `bats-core` (the bash test runner) is a
 checksummed source tarball installed with its own `install.sh`.
 

@@ -1,6 +1,6 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
 # Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; gh, gitleaks,
-# lefthook, actionlint, zizmor and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
+# lefthook, actionlint, zizmor, cargo-deny and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
 FROM ubuntu:26.04
 
 # pipefail so `curl | tar` and friends fail loudly on a broken download.
@@ -151,6 +151,27 @@ RUN set -eux; \
     install -m755 /tmp/zizmor-src/zizmor /usr/local/bin/zizmor; \
     rm -rf /tmp/zizmor.tar.gz /tmp/zizmor-src; \
     zizmor --version
+
+# cargo-deny: workspace dependency policy, used by CI and manifest-change hooks.
+# Checksums: https://github.com/EmbarkStudios/cargo-deny/releases/tag/0.20.2
+ARG CARGO_DENY_VERSION=0.20.2
+ENV CARGO_DENY_SHA256_AMD64=9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+ENV CARGO_DENY_SHA256_ARM64=995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) TOOL_ARCH=x86_64; SHA256="${CARGO_DENY_SHA256_AMD64}" ;; \
+      arm64) TOOL_ARCH=aarch64; SHA256="${CARGO_DENY_SHA256_ARM64}" ;; \
+      *) echo "Unsupported arch: $(dpkg --print-architecture)"; exit 1 ;; \
+    esac; \
+    TOOL_DIR="cargo-deny-${CARGO_DENY_VERSION}-${TOOL_ARCH}-unknown-linux-musl"; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/${TOOL_DIR}.tar.gz" \
+      -o /tmp/cargo-deny.tar.gz; \
+    echo "${SHA256}  /tmp/cargo-deny.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/cargo-deny.tar.gz -C /tmp "${TOOL_DIR}/cargo-deny"; \
+    install -m755 "/tmp/${TOOL_DIR}/cargo-deny" /usr/local/bin/cargo-deny; \
+    rm -rf /tmp/cargo-deny.tar.gz "/tmp/${TOOL_DIR}"; \
+    cargo-deny --version
 
 # bats-core: test runner for bash scripts. Released as a source tarball only (no
 # release assets), so this is GitHub's archive of the v${BATS_VERSION} tag. It is

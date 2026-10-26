@@ -31,7 +31,7 @@ curl -s -H 'Content-Type: application/json' \
 cargo test --locked
 ```
 
-The tests send requests straight into the router, with no network.
+The tests send requests straight into the router, with no network. Run `cargo deny --locked check` from the repo root to check dependency licenses, advisories, bans and sources for every workspace crate.
 
 ## The schema file
 

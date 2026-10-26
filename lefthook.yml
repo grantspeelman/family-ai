@@ -1,13 +1,14 @@
 # Installed into .git/hooks by .devcontainer/postStartCommand.sh.
 #
-# Every step runs only on the staged files that match its glob, passed in as
-# {staged_files}. A step with no matching files is skipped. A step that exits
-# non-zero blocks the commit. Steps run one after another and stop at the first
+# Steps run when staged files match their glob. File-based tools receive
+# {staged_files}; cargo-deny checks the workspace. No matches skips a step.
+# A step that exits non-zero blocks the commit. Steps run one after another and stop at the first
 # failure (piped: true).
 #
 # Steps marked PLACEHOLDER call .lefthook/placeholder.sh, which prints that no
-# check ran. Until PR 2 and PR 7 add their globs, only .rs and Cargo.* files are
-# covered by the placeholders; workflows have real lint steps below. Other types
+# check ran. The .rs steps remain placeholders until their tools are installed;
+# workflows have real lint steps and manifest or
+# lockfile changes run cargo-deny for the workspace. Other types
 # are checked by the secret scan only and skipped by other steps. {staged_files} covers
 # added, copied, modified and renamed files; deleted files are not passed.
 # To add a language's checks, see docs/conventions.md.
@@ -32,10 +33,10 @@ pre-commit:
       glob: "*.rs"
       run: .lefthook/placeholder.sh duplication-and-complexity "PR 7" {staged_files}
 
-    # PLACEHOLDER until PR 7 installs cargo-deny. Runs only when a manifest or lockfile changes.
+    # Check the workspace's dependencies when a manifest or lockfile changes.
     5-cargo-deny:
       glob: "{Cargo.toml,Cargo.lock,**/Cargo.toml,**/Cargo.lock}"
-      run: .lefthook/placeholder.sh cargo-deny "PR 7" {staged_files}
+      run: cargo deny --locked check
 
     6-actionlint:
       glob: ".github/workflows/*.{yml,yaml}"
