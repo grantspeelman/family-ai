@@ -6,15 +6,16 @@ Standing rules for every PR in this build. `AGENTS.md` is the entry point and co
 
 ## What is enforced today
 
-The pre-commit hook runs gitleaks on staged changes and actionlint plus zizmor on staged workflow files. CI scans the full history for secrets and checks all workflows on every PR and push to main. The hook also carries placeholder application checks that check nothing until their tools are installed.
+The pre-commit hook runs gitleaks on staged changes, cargo fmt and clippy on the Rust workspace when Rust or Cargo files are staged, and actionlint plus zizmor on staged workflow files. CI scans the full history for secrets, checks all workflows and runs cargo fmt and clippy on the whole workspace on every PR and push to main. The hook also carries placeholder application checks (Rust tests, duplication, complexity and cargo-deny) that check nothing until their tools are installed.
 
-Coverage gap: Until PR 2 and PR 7 install the application checks and add their globs, only workflows have real changed-files lint checks. Other files are checked by the secret scan; `.rs` and `Cargo.*` files also run the placeholders.
+Coverage gap: Rust (`*.rs`, `Cargo.toml`, `Cargo.lock`) and workflow files have real lint checks in the hook; Rust tests, duplication, complexity and cargo-deny are still placeholders until the later PR 2 jobs and PR 7 install them. Other files are checked by the secret scan only.
 
 | Rule | Enforced by | Status |
 | --- | --- | --- |
 | No secrets in commits | gitleaks pre-commit hook | Enforced today |
-| Lint, tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place; steps are placeholders until PRs 2 and 7 |
-| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place. It covers the container checks, the workflow safety lint, the full-history secret scan and the registry app's tests and image. Lint, duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
+| Rust lint: `cargo fmt --all --check` and `cargo clippy --workspace --all-targets --locked -- -D warnings` | Pre-commit hook (`2-lint`, when a `*.rs`, `Cargo.toml` or `Cargo.lock` file is staged) and CI (`image` job, steps "cargo fmt" and "cargo clippy", inside the `ci` gate) | Enforced today on the whole Cargo workspace, so a crate added to `members` is covered with no change. CI runs both commands in the dev container image the `image` job builds, which has Rust 1.93 with clippy and rustfmt. Default lints and formatting, no `clippy.toml` or `rustfmt.toml` |
+| Tests, duplication and complexity on changed files | Pre-commit hook | Hook wiring in place; steps are placeholders until the later PR 2 jobs and PR 7 |
+| Merge gate: one required `ci` check, green only if every CI job is green | CI (`ci` job in `devcontainer-ci.yml`) | Workflow in place. It covers the container checks, the workflow safety lint, the full-history secret scan, the Rust workspace lint and the registry app's tests and image. Duplication, complexity and license jobs do not exist yet; each arrives with its stack PR (PRs 2, 6, 7) and is added to `ci`'s `needs:`. Requiring `ci` in branch protection is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Workflow safety rules (below) | Pre-commit hook and CI (`workflows` job): actionlint and zizmor | Enforced for staged workflows locally and all workflows in CI. Automated coverage and remaining reviewer checks are listed below. The fork-PR approval setting is the owner's action: [docs/github-settings.md](github-settings.md) |
 | Bash script tests (`*.bats`) | CI (`image` job, step "Bats tests", inside the `ci` gate) | Workflow in place. Finds every tracked `*.bats` file with `git ls-files` and runs them in the built image; fails if none are found. Not run by the pre-commit hook |
 | Registry app tests and image | CI (`registry` job, inside the `ci` gate) | Workflow in place. Runs `cargo test --locked` in the Dockerfile's Rust `toolchain` stage, builds `registry/Dockerfile`, starts the image and queries `/healthz` and `/graphql`. Not run by the pre-commit hook |
@@ -25,9 +26,9 @@ Coverage gap: Until PR 2 and PR 7 install the application checks and add their g
 
 ## Pre-commit hook: what passing means, and adding a language
 
-The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint, the full-history secret scan and the registry app's tests and image.
+The hook is configured in `lefthook.yml`. It is a fast local check on the files in the commit. CI is the real gate: the `ci` job is the single required check and is green only if every CI job is. CI runs every test and lint job that exists; today that is the container checks, the workflow safety lint, the full-history secret scan, the Rust workspace lint and the registry app's tests and image.
 
-**Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that lint, tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders.
+**Passing** means every step that applies to the staged files exits zero. A step applies when at least one staged file matches its glob; otherwise it is skipped. Any non-zero exit blocks the commit. Placeholder steps exit zero but are not checks run: they print `PLACEHOLDER` and what they would have received, and lefthook's summary still shows them as done, so read the output, not the tick. A hook pass is not evidence that tests, duplication, complexity or dependency licenses were checked until the real steps replace the placeholders. The Rust lint step is real: it checks the whole workspace as it is on disk, so unstaged edits to Rust files count too.
 
 Steps run in order and stop at the first failure. Each step gets only the staged files matching its glob, through `{staged_files}`, not the whole tree. `{staged_files}` covers added, copied, modified and renamed files; deleted files are not passed.
 
@@ -44,7 +45,7 @@ For `cargo-deny`, the step's glob matches `Cargo.toml` and `Cargo.lock`, so it o
 
 Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core), installed in the dev container. Tests live in `*.bats` files next to the script they cover and run with `bats <file>`. CI runs every tracked `*.bats` file automatically (the `image` job finds them with `git ls-files` and runs them in the built image, so the same pinned bats-core), so a new test needs no workflow change. The file must be committed (tracked) to be found, and CI fails if it finds none.
 
-Covered today: `.devcontainer/start.sh`, `postStartCommand.sh`, `entrypoint.sh`, the token-file check, and `.lefthook/placeholder.sh`. Tests shim external commands (`docker`, `ssh-agent` and so on) and use temp dirs, never the real `HOME`. `.devcontainer/smoke-test.sh` is the deliberate exception: it builds and starts a real container, so it needs Docker and a network and CI runs it as its own step.
+Covered today: `.devcontainer/start.sh`, `postStartCommand.sh`, `entrypoint.sh`, the token-file check, and `.lefthook/placeholder.sh`. `.lefthook/workflows.bats` and `.lefthook/rust-lint.bats` test the hook's workflow and Rust lint steps with real commits in disposable repos. Tests shim external commands (`docker`, `ssh-agent` and so on) and use temp dirs, never the real `HOME`. `.devcontainer/smoke-test.sh` is the deliberate exception: it builds and starts a real container, so it needs Docker and a network and CI runs it as its own step.
 
 ## Workflow safety
 
