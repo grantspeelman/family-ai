@@ -1,0 +1,8 @@
+# Clippy configuration for every crate in the Cargo workspace. Clippy finds this
+# file by searching up from each crate's directory, so a crate added to
+# `members` uses it with no extra config.
+
+# Ceiling for `clippy::cognitive_complexity`, which the CI `complexity` job
+# denies. Deliberately loose: above clippy's default of 25, so it only catches a
+# badly tangled function, not normal growth. Tighten it later with real code.
+cognitive-complexity-threshold = 30
