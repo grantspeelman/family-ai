@@ -1,7 +1,8 @@
 # Cargo workspace for the Rust code in this repo. Each member is a crate in its
-# own directory; add new ones to `members`.
+# own directory; add new ones to `members` and to the COPY lines in
+# registry/Dockerfile, because cargo loads every member.
 [workspace]
-members = ["registry"]
+members = ["fly-mock", "registry"]
 resolver = "3"
 
 [workspace.package]
