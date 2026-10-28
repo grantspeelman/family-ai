@@ -153,25 +153,33 @@ commandTests:
   - name: PMD is 7.28.0 (PMD_VERSION)
     command: pmd
     args: ["--version"]
-    expectedOutput: ['^PMD 7\.28\.0']
+    # PMD prints its banner before the version line; anchor that line explicitly.
+    expectedOutput: ['(?m)^PMD 7\.28\.0[[:space:]]']
 
   - name: PMD CPD detects a 300-token Rust clone
-    command: bash
+    # CST expands dollar references in arguments before starting the command.
+    # Python keeps fixture paths and token values local to the running test.
+    command: python3
     args:
       - -c
       - |
-        set -euo pipefail
-        fixture=$(mktemp -d)
-        trap 'rm -rf "$fixture"' EXIT
-        {
-          printf 'fn duplicated() {\n'
-          for i in $(seq 0 57); do
-            printf '    let value_%s = %s;\n' "$i" "$i"
-          done
-          printf '    return ();\n}\n'
-        } > "$fixture/first.rs"
-        cp "$fixture/first.rs" "$fixture/second.rs"
-        pmd cpd --language rust --minimum-tokens 300 --dir "$fixture"
+        from pathlib import Path
+        import subprocess
+        import sys
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="pmd-cpd-") as directory:
+            fixture = Path(directory)
+            source = "fn duplicated() {\n"
+            source += "".join(f"    let value_{i} = {i};\n" for i in range(58))
+            source += "    return ();\n}\n"
+            for name in ("first.rs", "second.rs"):
+                (fixture / name).write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                ["pmd", "cpd", "--language", "rust", "--minimum-tokens", "300", "--dir", directory],
+                check=False,
+            )
+        sys.exit(result.returncode)
     expectedOutput: ['300 tokens']
     exitCode: 4
 
