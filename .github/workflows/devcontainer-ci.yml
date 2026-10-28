@@ -324,6 +324,39 @@ jobs:
             echo "| Result | $result |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+  # Function complexity for the whole Cargo workspace: clippy's
+  # `cognitive_complexity` lint, denied, with every other clippy lint allowed, so
+  # this job passes or fails on complexity alone. The threshold is set once, in the
+  # root `clippy.toml`. cargo runs in the registry Dockerfile's `toolchain` stage,
+  # like the `registry` job, so the Rust tag is set in one place and no third-party
+  # action sets up Rust. rustup adds clippy for that toolchain's own Rust version.
+  # `--workspace --all-targets` with no -p flags, so a crate added to `members` is
+  # checked with no change here.
+  complexity:
+    name: complexity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build toolchain image
+        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
+
+      # Run as the checkout's owner so target/ is writable and owned by the runner.
+      - name: Cognitive complexity
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
+            bash -euo pipefail -c '
+              rustup component add clippy
+              cargo clippy --workspace --all-targets --locked -- \
+                -A clippy::all -D clippy::cognitive_complexity
+            '
+
   # CPD's Rust lexer scans only tracked Rust files, across all current and future
   # workspace crates. Java and unzip are supplied by the Ubuntu runner image.
   duplication:
@@ -391,7 +424,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication]
+    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication, complexity]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
