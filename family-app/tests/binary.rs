@@ -4,7 +4,7 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
 
@@ -28,6 +28,16 @@ impl Drop for TempDir {
     }
 }
 
+/// Kills the child on drop, so a failing assertion does not leak it.
+struct Running(Child);
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 fn free_addr() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.local_addr().unwrap().to_string()
@@ -37,7 +47,6 @@ fn free_addr() -> String {
 fn unset_data_dir_exits_non_zero_naming_the_variable() {
     let output = Command::new(BIN)
         .env_remove("FAMILY_APP_DATA_DIR")
-        .env("FAMILY_APP_ADDR", free_addr())
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -51,7 +60,6 @@ fn missing_data_dir_exits_non_zero_naming_the_path() {
     let missing = dir.0.join("absent");
     let output = Command::new(BIN)
         .env("FAMILY_APP_DATA_DIR", &missing)
-        .env("FAMILY_APP_ADDR", free_addr())
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -67,15 +75,17 @@ fn missing_data_dir_exits_non_zero_naming_the_path() {
 fn valid_data_dir_serves_healthz_and_creates_notes_table() {
     let dir = TempDir::new("valid");
     let addr = free_addr();
-    let mut child = Command::new(BIN)
-        .env("FAMILY_APP_DATA_DIR", &dir.0)
-        .env("FAMILY_APP_ADDR", &addr)
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut child = Running(
+        Command::new(BIN)
+            .env("FAMILY_APP_DATA_DIR", &dir.0)
+            .env("FAMILY_APP_ADDR", &addr)
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
 
     // Wait for the "listening" line, which comes after the database is open.
-    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut stderr = BufReader::new(child.0.stderr.take().unwrap());
     let mut log = String::new();
     loop {
         let mut line = String::new();
@@ -102,8 +112,7 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
         .unwrap();
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
-    child.kill().unwrap();
-    child.wait().unwrap();
+    drop(child);
 
     assert!(response.starts_with("HTTP/1.1 200"), "response: {response}");
     assert!(response.ends_with("ok"), "response: {response}");
@@ -122,4 +131,15 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
         assert_eq!(count, 1);
         pool.close().await;
     });
+}
+
+#[test]
+fn empty_data_dir_is_treated_as_unset() {
+    let output = Command::new(BIN)
+        .env("FAMILY_APP_DATA_DIR", "")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("FAMILY_APP_DATA_DIR"), "stderr: {stderr}");
 }

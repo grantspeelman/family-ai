@@ -6,9 +6,10 @@ const DEFAULT_ADDR: &str = "127.0.0.1:8080";
 
 #[tokio::main]
 async fn main() {
-    let Some(data_dir) = std::env::var_os("FAMILY_APP_DATA_DIR") else {
+    let Some(data_dir) = std::env::var_os("FAMILY_APP_DATA_DIR").filter(|dir| !dir.is_empty())
+    else {
         eprintln!(
-            "family-app: FAMILY_APP_DATA_DIR is not set; set it to the data volume's directory"
+            "family-app: FAMILY_APP_DATA_DIR is not set or empty; set it to the data volume's directory"
         );
         std::process::exit(1);
     };

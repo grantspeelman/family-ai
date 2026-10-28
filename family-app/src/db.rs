@@ -32,6 +32,8 @@ pub enum Error {
     MissingDir(PathBuf),
     /// SQLite could not open the database file.
     Open(PathBuf, sqlx::Error),
+    /// The current schema version could not be read.
+    Version(PathBuf, sqlx::Error),
     /// A migration failed; the schema stays at `from`.
     Migrate {
         path: PathBuf,
@@ -44,9 +46,16 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::MissingDir(dir) => {
-                write!(f, "data directory {} does not exist", dir.display())
+                write!(
+                    f,
+                    "data directory \"{}\" does not exist or is not a directory",
+                    dir.display()
+                )
             }
             Error::Open(path, err) => write!(f, "cannot open {}: {err}", path.display()),
+            Error::Version(path, err) => {
+                write!(f, "cannot read schema version of {}: {err}", path.display())
+            }
             Error::Migrate { path, from, source } => write!(
                 f,
                 "migration from version {from} failed on {}: {source}",
@@ -72,21 +81,22 @@ pub async fn open(data_dir: &Path) -> Result<SqlitePool, Error> {
         .connect_with(options)
         .await
         .map_err(|err| Error::Open(path.clone(), err))?;
-    migrate(&pool)
-        .await
-        .map_err(|(from, source)| Error::Migrate { path, from, source })?;
+    migrate(&pool).await.map_err(|(from, source)| match from {
+        None => Error::Version(path, source),
+        Some(from) => Error::Migrate { path, from, source },
+    })?;
     Ok(pool)
 }
 
 /// Runs each pending migration in its own transaction, which also bumps
 /// `user_version`, so a migration and its version commit together.
-async fn migrate(pool: &SqlitePool) -> Result<(), (i64, sqlx::Error)> {
+async fn migrate(pool: &SqlitePool) -> Result<(), (Option<i64>, sqlx::Error)> {
     loop {
-        let mut tx = pool.begin().await.map_err(|err| (-1, err))?;
+        let mut tx = pool.begin().await.map_err(|err| (None, err))?;
         let version: i64 = sqlx::query_scalar("PRAGMA user_version")
             .fetch_one(&mut *tx)
             .await
-            .map_err(|err| (-1, err))?;
+            .map_err(|err| (None, err))?;
         let Some(sql) = usize::try_from(version)
             .ok()
             .and_then(|index| MIGRATIONS.get(index))
@@ -100,6 +110,6 @@ async fn migrate(pool: &SqlitePool) -> Result<(), (i64, sqlx::Error)> {
                 .await?;
             tx.commit().await
         };
-        step.await.map_err(|err| (version, err))?;
+        step.await.map_err(|err| (Some(version), err))?;
     }
 }
