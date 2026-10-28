@@ -4,9 +4,9 @@
 # fails otherwise.
 #
 # Image design:
-#   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite, gosu and Docker come
+#   • Base ubuntu:26.04. Node 22, Python 3, Java 25, Rust 1.93, SQLite, gosu and Docker come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
-#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny and bats-core are pinned, checksummed downloads, pinned exactly.
+#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny, PMD and bats-core are pinned, checksummed downloads, pinned exactly.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
 #   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
@@ -143,6 +143,45 @@ commandTests:
     command: cargo-deny
     args: ["--version"]
     expectedOutput: ['^cargo-deny 0\.20\.2\r?\n?$']
+
+  - name: Java is 25.x (Ubuntu 26.04 archive, PMD CPD runtime)
+    command: java
+    args: ["-version"]
+    expectedError: ['openjdk version "25\.']
+    exitCode: 0
+
+  - name: PMD is 7.28.0 (PMD_VERSION)
+    command: pmd
+    args: ["--version"]
+    # PMD prints its banner before the version line; anchor that line explicitly.
+    expectedOutput: ['(?m)^PMD 7\.28\.0[[:space:]]']
+
+  - name: PMD CPD detects a 300-token Rust clone
+    # CST expands dollar references in arguments before starting the command.
+    # Python keeps fixture paths and token values local to the running test.
+    command: python3
+    args:
+      - -c
+      - |
+        from pathlib import Path
+        import subprocess
+        import sys
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="pmd-cpd-") as directory:
+            fixture = Path(directory)
+            source = "fn duplicated() {\n"
+            source += "".join(f"    let value_{i} = {i};\n" for i in range(58))
+            source += "    return ();\n}\n"
+            for name in ("first.rs", "second.rs"):
+                (fixture / name).write_text(source, encoding="utf-8")
+            result = subprocess.run(
+                ["pmd", "cpd", "--language", "rust", "--minimum-tokens", "300", "--dir", directory],
+                check=False,
+            )
+        sys.exit(result.returncode)
+    expectedOutput: ['300 tokens']
+    exitCode: 4
 
   - name: shellcheck installed (actionlint shell checks)
     command: shellcheck

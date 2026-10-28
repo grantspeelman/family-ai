@@ -1,6 +1,6 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
 # Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; gh, gitleaks,
-# lefthook, actionlint, zizmor, cargo-deny and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
+# lefthook, actionlint, zizmor, cargo-deny, PMD and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
 FROM ubuntu:26.04
 
 # pipefail so `curl | tar` and friends fail loudly on a broken download.
@@ -14,6 +14,7 @@ ARG USER_GID=1000
 # From the Ubuntu archive:
 #   • nodejs/npm (Node 22): only needed to install and run Claude Code and Codex.
 #   • python3: for the ad-hoc scripts Claude writes and runs.
+#   • default-jre-headless: the Java runtime for PMD CPD, on amd64 and arm64.
 #   • rustc/cargo/rustfmt/rust-clippy (Rust 1.93): the toolchain for the registry and
 #     family apps. build-essential gives cargo a linker and C compiler, and
 #     sqlite3/libsqlite3-dev/pkg-config cover the family app's SQLite database.
@@ -29,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     cargo \
     curl \
+    default-jre-headless \
     docker-buildx \
     docker-compose-v2 \
     docker.io \
@@ -172,6 +174,22 @@ RUN set -eux; \
     install -m755 "/tmp/${TOOL_DIR}/cargo-deny" /usr/local/bin/cargo-deny; \
     rm -rf /tmp/cargo-deny.tar.gz "/tmp/${TOOL_DIR}"; \
     cargo-deny --version
+
+# PMD CPD: Rust duplication checks, also installed independently in CI. The ZIP
+# contains Java bytecode and the launcher, so amd64 and arm64 use the same pin;
+# default-jre-headless supplies the architecture's runtime from the archive.
+# Published asset digest: https://github.com/pmd/pmd/releases/tag/pmd_releases%2F7.28.0
+ARG PMD_VERSION=7.28.0
+ENV PMD_SHA256=f974ba571f7bc01c73fffe11bade25fbc1f438698f9e9c00e416e8d65e9fbac2
+RUN set -eux; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" \
+      -o /tmp/pmd.zip; \
+    echo "${PMD_SHA256}  /tmp/pmd.zip" | sha256sum -c -; \
+    unzip -q /tmp/pmd.zip -d /opt; \
+    ln -s "/opt/pmd-bin-${PMD_VERSION}/bin/pmd" /usr/local/bin/pmd; \
+    rm /tmp/pmd.zip; \
+    pmd --version
 
 # bats-core: test runner for bash scripts. Released as a source tarball only (no
 # release assets), so this is GitHub's archive of the v${BATS_VERSION} tag. It is
