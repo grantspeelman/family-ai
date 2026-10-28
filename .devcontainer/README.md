@@ -124,9 +124,16 @@ family app can all run and talk to each other over localhost.
 | Rust 1.93 (`rustc`, `cargo`, `rustfmt`, `clippy`) | Ubuntu archive |
 | `build-essential`, `pkg-config` | Ubuntu archive |
 | `sqlite3` CLI and `libsqlite3-dev` | Ubuntu archive |
+| Java 25 (`default-jre-headless`) | Ubuntu archive |
+| PMD CPD 7.28.0 (`pmd`) | SHA-256-verified upstream ZIP |
 
-Nothing here is pinned by checksum; the archive's Rust series is what the
-structure test asserts. If you need a newer Rust than the archive offers (a
+The archive packages follow the base image; structure tests assert the Rust and
+Java series. PMD uses the same version and checksum as the duplication CI job;
+its Java bytecode runs on both amd64 and arm64. Run `pmd --version` to check the
+installation and `pmd cpd --help` for local duplication checks. Installing it
+does not wire the duplication pre-commit placeholder yet.
+
+If you need a newer Rust than the archive offers (a
 crate's MSRV, say), replace `rustc`/`cargo`/`rustfmt`/`rust-clippy` with a pinned,
 SHA-256-checked rustup toolchain in the `Dockerfile` and update the structure test
 in the same commit. The pinned `cargo-deny` checks workspace dependencies. The
@@ -164,7 +171,8 @@ this mode.
 
 The image is `ubuntu:26.04`. Most tools come from Ubuntu's archive; `gh` and
 `gitleaks` are too old there, so they're checksummed release binaries. `lefthook`, `actionlint`, `zizmor` and `cargo-deny`
-are checksummed binaries too, and `bats-core` (the bash test runner) is a
+are checksummed binaries too. PMD CPD is a checksummed ZIP with its Java runtime
+from the Ubuntu archive, and `bats-core` (the bash test runner) is a
 checksummed source tarball installed with its own `install.sh`.
 
 `container-structure-test.yaml` is the spec for the image. Each pinned tool has

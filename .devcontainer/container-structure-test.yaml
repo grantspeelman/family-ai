@@ -4,9 +4,9 @@
 # fails otherwise.
 #
 # Image design:
-#   • Base ubuntu:26.04. Node 22, Python 3, Rust 1.93, SQLite, gosu and Docker come
+#   • Base ubuntu:26.04. Node 22, Python 3, Java 25, Rust 1.93, SQLite, gosu and Docker come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
-#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny and bats-core are pinned, checksummed downloads, pinned exactly.
+#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny, PMD and bats-core are pinned, checksummed downloads, pinned exactly.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
 #   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
@@ -143,6 +143,37 @@ commandTests:
     command: cargo-deny
     args: ["--version"]
     expectedOutput: ['^cargo-deny 0\.20\.2\r?\n?$']
+
+  - name: Java is 25.x (Ubuntu 26.04 archive, PMD CPD runtime)
+    command: java
+    args: ["-version"]
+    expectedError: ['openjdk version "25\.']
+    exitCode: 0
+
+  - name: PMD is 7.28.0 (PMD_VERSION)
+    command: pmd
+    args: ["--version"]
+    expectedOutput: ['^PMD 7\.28\.0']
+
+  - name: PMD CPD detects a 300-token Rust clone
+    command: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        fixture=$(mktemp -d)
+        trap 'rm -rf "$fixture"' EXIT
+        {
+          printf 'fn duplicated() {\n'
+          for i in $(seq 0 57); do
+            printf '    let value_%s = %s;\n' "$i" "$i"
+          done
+          printf '    return ();\n}\n'
+        } > "$fixture/first.rs"
+        cp "$fixture/first.rs" "$fixture/second.rs"
+        pmd cpd --language rust --minimum-tokens 300 --dir "$fixture"
+    expectedOutput: ['300 tokens']
+    exitCode: 4
 
   - name: shellcheck installed (actionlint shell checks)
     command: shellcheck
