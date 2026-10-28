@@ -324,6 +324,62 @@ jobs:
             echo "| Result | $result |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+  # CPD's Rust lexer scans only tracked Rust files, across all current and future
+  # workspace crates. Java and unzip are supplied by the Ubuntu runner image.
+  duplication:
+    name: duplication
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Published asset digest: https://github.com/pmd/pmd/releases/tag/pmd_releases%2F7.28.0
+      PMD_VERSION: 7.28.0
+      PMD_SHA256: f974ba571f7bc01c73fffe11bade25fbc1f438698f9e9c00e416e8d65e9fbac2
+      # Report 100+ tokens to expose smaller clones without blocking work. Fail
+      # at 300+ tokens: a generous initial limit for substantial copy-paste,
+      # rather than ordinary Rust/test boilerplate. Tighten with real data later.
+      DUPLICATION_REPORT_TOKENS: 100
+      DUPLICATION_FAIL_TOKENS: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install PMD CPD
+        run: |
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/pmd.zip" \
+            "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
+          echo "${PMD_SHA256}  $RUNNER_TEMP/pmd.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/pmd.zip" -d "$RUNNER_TEMP"
+
+      - name: Rust duplication
+        run: |
+          git ls-files -z -- '*.rs' > "$RUNNER_TEMP/rust-files.nul"
+          file_list="$RUNNER_TEMP/rust-files.txt"
+          : > "$file_list"
+          while IFS= read -r -d '' file; do
+            # CPD's file list uses commas/newlines as separators. Refuse these
+            # names so a tracked file cannot silently be omitted or split.
+            case "$file" in
+              *$'\n'*|*$'\r'*|*,*)
+                echo "Rust filename contains a CPD file-list separator" >&2
+                exit 1
+                ;;
+            esac
+            # Absolute paths preserve spaces and names beginning with a dash.
+            printf '%s/%s\n' "$PWD" "$file" >> "$file_list"
+          done < "$RUNNER_TEMP/rust-files.nul"
+          if [ ! -s "$file_list" ]; then
+            echo "no tracked Rust files found" >&2
+            exit 1
+          fi
+          cpd="$RUNNER_TEMP/pmd-bin-$PMD_VERSION/bin/pmd"
+          echo "Reporting duplicates of ${DUPLICATION_REPORT_TOKENS}+ tokens"
+          "$cpd" cpd --language rust --file-list "$file_list" \
+            --minimum-tokens "$DUPLICATION_REPORT_TOKENS" --no-fail-on-violation --fail-on-error
+          echo "Rejecting duplicates of ${DUPLICATION_FAIL_TOKENS}+ tokens"
+          "$cpd" cpd --language rust --file-list "$file_list" \
+            --minimum-tokens "$DUPLICATION_FAIL_TOKENS" --fail-on-violation --fail-on-error
+
   # The single required status check. Branch protection requires this job's name
   # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
   # a job is gated once it is in that list. `if: always()` makes this job run even
@@ -335,7 +391,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry, cargo-deny, coverage]
+    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
