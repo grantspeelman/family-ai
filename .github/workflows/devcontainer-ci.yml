@@ -247,6 +247,83 @@ jobs:
           echo "$response"
           jq -e --arg v "$expected" '.data.apiVersion == $v' <<<"$response"
 
+  # Line coverage for the whole Cargo workspace, gated on a floor. cargo runs in
+  # the registry Dockerfile's `toolchain` stage, like the `registry` job, so the
+  # Rust tag is set in one place and no third-party action sets up Rust. rustup
+  # adds llvm-tools-preview for that toolchain's own Rust version. `--workspace`
+  # with no -p flags, so a crate added to `members` is measured with no change here.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
+      # The asset digest published on the release page.
+      CARGO_LLVM_COV_VERSION: 0.9.1
+      CARGO_LLVM_COV_SHA256: 3fca950394a3c49457657c158b1619cec8dfd2647ae5b48746734c0ab969a522
+      # Minimum workspace line coverage, in percent. Deliberately generous: it
+      # catches a collapse (tests not running, say), not normal drift. main
+      # measured 19.61% when this was set. Tighten it later with real data.
+      COVERAGE_FLOOR: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-llvm-cov
+        run: |
+          mkdir -p "$RUNNER_TEMP/cargo-llvm-cov"
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/cargo-llvm-cov.tar.gz" \
+            "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${CARGO_LLVM_COV_VERSION}/cargo-llvm-cov-x86_64-unknown-linux-musl.tar.gz"
+          echo "${CARGO_LLVM_COV_SHA256}  $RUNNER_TEMP/cargo-llvm-cov.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/cargo-llvm-cov.tar.gz" -C "$RUNNER_TEMP/cargo-llvm-cov" cargo-llvm-cov
+
+      - name: Build toolchain image
+        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
+
+      # Runs the tests once, saves the totals as JSON for the summary step, then
+      # prints the per-file table and exits non-zero if line coverage is below
+      # COVERAGE_FLOOR. Run as the checkout's owner so target/ is writable and
+      # owned by the runner.
+      - name: Coverage
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -e COVERAGE_FLOOR \
+            -v "$RUNNER_TEMP/cargo-llvm-cov:/opt/cargo-llvm-cov:ro" \
+            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
+            bash -euo pipefail -c '
+              rustup component add llvm-tools-preview
+              cov=/opt/cargo-llvm-cov/cargo-llvm-cov
+              "$cov" llvm-cov --workspace --locked --no-report
+              "$cov" llvm-cov report --json --summary-only --output-path target/llvm-cov-summary.json
+              "$cov" llvm-cov report --summary-only --fail-under-lines "$COVERAGE_FLOOR"
+            '
+
+      # Runs after a pass or a below-floor failure, so the total is always shown.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: |
+          summary=target/llvm-cov-summary.json
+          if [ ! -f "$summary" ]; then
+            echo "no coverage report: the Coverage step failed before measuring" >&2
+            exit 1
+          fi
+          lines=$(jq -r '.data[0].totals.lines | "\(.percent * 100 | round / 100)% (\(.covered) of \(.count) lines)"' "$summary")
+          if jq -e --argjson floor "$COVERAGE_FLOOR" '.data[0].totals.lines.percent >= $floor' "$summary" >/dev/null; then
+            result="at or above the floor"
+          else
+            result="below the floor"
+          fi
+          {
+            echo "## Coverage"
+            echo
+            echo "| Measure | Value |"
+            echo "| --- | --- |"
+            echo "| Workspace line coverage | $lines |"
+            echo "| Floor | ${COVERAGE_FLOOR}% |"
+            echo "| Result | $result |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
   # The single required status check. Branch protection requires this job's name
   # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
   # a job is gated once it is in that list. `if: always()` makes this job run even
@@ -258,7 +335,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry, cargo-deny]
+    needs: [image, smoke, workflows, registry, cargo-deny, coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
