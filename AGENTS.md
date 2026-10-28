@@ -35,6 +35,7 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | --- | --- |
 | `first-build-pr-sequence.md` in the repo root | The overall PR sequence and its working notes. |
 | `Cargo.toml`, `Cargo.lock` | The Cargo workspace for the Rust code. Add new crates to `members`. |
+| `family-app/` | The family app: the Rust service that runs on each family's Machine, with SQLite on its volume. A scaffold with a health check so far. `family-app/README.md` explains it. |
 | `registry/` | The registry app: a Rust GraphQL API with its own `Dockerfile`, `schema.graphql` and tests. `registry/README.md` explains it. |
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
 | `.claude/skills/factory/` | The `/factory` skill: the orchestrator of the software factory. Its `SKILL.md` has the loop and the commands. |
