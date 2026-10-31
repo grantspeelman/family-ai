@@ -2,7 +2,7 @@
 # own directory; add new ones to `members` and to the COPY lines in
 # registry/Dockerfile, because cargo loads every member.
 [workspace]
-members = ["family-app", "fly-mock", "registry"]
+members = ["e2e", "family-app", "fly-mock", "registry"]
 resolver = "3"
 
 [workspace.package]
