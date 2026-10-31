@@ -7,23 +7,17 @@ use std::{
 
 use sqlx::{
     SqlitePool,
+    migrate::{MigrateError, Migrator},
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 
 /// The database file's name inside the data directory.
 pub const DB_FILE: &str = "family.db";
 
-/// Migrations in order. Migration `i` (from zero) takes the schema from
-/// version `i` to `i + 1`, recorded in `PRAGMA user_version`. Append only:
-/// never edit or reorder a migration that has shipped.
-const MIGRATIONS: &[&str] = &["CREATE TABLE notes (
-        id INTEGER PRIMARY KEY,
-        body TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )"];
-
-/// The schema version once every migration has run.
-pub const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
+/// The migrations in `migrations/`, embedded at compile time. sqlx records
+/// each applied one in the `_sqlx_migrations` table and runs each pending one
+/// once, in its own transaction.
+static MIGRATOR: Migrator = sqlx::migrate!();
 
 /// Why the database could not be opened or migrated.
 #[derive(Debug)]
@@ -32,14 +26,8 @@ pub enum Error {
     MissingDir(PathBuf),
     /// SQLite could not open the database file.
     Open(PathBuf, sqlx::Error),
-    /// The current schema version could not be read.
-    Version(PathBuf, sqlx::Error),
-    /// A migration failed; the schema stays at `from`.
-    Migrate {
-        path: PathBuf,
-        from: i64,
-        source: sqlx::Error,
-    },
+    /// A migration could not be applied.
+    Migrate(PathBuf, MigrateError),
 }
 
 impl fmt::Display for Error {
@@ -53,14 +41,9 @@ impl fmt::Display for Error {
                 )
             }
             Error::Open(path, err) => write!(f, "cannot open {}: {err}", path.display()),
-            Error::Version(path, err) => {
-                write!(f, "cannot read schema version of {}: {err}", path.display())
+            Error::Migrate(path, err) => {
+                write!(f, "cannot migrate {}: {err}", path.display())
             }
-            Error::Migrate { path, from, source } => write!(
-                f,
-                "migration from version {from} failed on {}: {source}",
-                path.display()
-            ),
         }
     }
 }
@@ -81,35 +64,9 @@ pub async fn open(data_dir: &Path) -> Result<SqlitePool, Error> {
         .connect_with(options)
         .await
         .map_err(|err| Error::Open(path.clone(), err))?;
-    migrate(&pool).await.map_err(|(from, source)| match from {
-        None => Error::Version(path, source),
-        Some(from) => Error::Migrate { path, from, source },
-    })?;
+    MIGRATOR
+        .run(&pool)
+        .await
+        .map_err(|err| Error::Migrate(path, err))?;
     Ok(pool)
-}
-
-/// Runs each pending migration in its own transaction, which also bumps
-/// `user_version`, so a migration and its version commit together.
-async fn migrate(pool: &SqlitePool) -> Result<(), (Option<i64>, sqlx::Error)> {
-    loop {
-        let mut tx = pool.begin().await.map_err(|err| (None, err))?;
-        let version: i64 = sqlx::query_scalar("PRAGMA user_version")
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|err| (None, err))?;
-        let Some(sql) = usize::try_from(version)
-            .ok()
-            .and_then(|index| MIGRATIONS.get(index))
-        else {
-            return Ok(());
-        };
-        let step = async {
-            sqlx::query(sql).execute(&mut *tx).await?;
-            sqlx::query(&format!("PRAGMA user_version = {}", version + 1))
-                .execute(&mut *tx)
-                .await?;
-            tx.commit().await
-        };
-        step.await.map_err(|err| (Some(version), err))?;
-    }
 }

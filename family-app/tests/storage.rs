@@ -25,9 +25,10 @@ impl Drop for TempDir {
     }
 }
 
-async fn user_version(pool: &sqlx::SqlitePool) -> i64 {
-    sqlx::query_scalar("PRAGMA user_version")
-        .fetch_one(pool)
+/// The applied migrations as sqlx records them: (version, success, checksum).
+async fn applied(pool: &sqlx::SqlitePool) -> Vec<(i64, bool, Vec<u8>)> {
+    sqlx::query_as("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
+        .fetch_all(pool)
         .await
         .unwrap()
 }
@@ -46,7 +47,9 @@ async fn fresh_directory_gets_family_db_with_notes_table() {
             .map(|row| row.get("name"))
             .collect();
     assert_eq!(columns, ["id", "body", "created_at"]);
-    assert_eq!(user_version(&pool).await, db::SCHEMA_VERSION);
+    let applied = applied(&pool).await;
+    assert_eq!(applied.len(), 1);
+    assert_eq!((applied[0].0, applied[0].1), (1, true));
     pool.close().await;
 }
 
@@ -75,15 +78,15 @@ async fn row_survives_close_and_reopen() {
 }
 
 #[tokio::test]
-async fn second_open_runs_no_migration_and_keeps_version() {
+async fn second_open_runs_no_migration_and_keeps_applied_migrations() {
     let dir = TempDir::new("twice");
     let pool = db::open(&dir.0).await.unwrap();
-    let version = user_version(&pool).await;
+    let before = applied(&pool).await;
     pool.close().await;
 
-    // A second run of the first migration would fail: the table exists.
+    // A second run of migration 1 would fail (the table exists) or add a row.
     let pool = db::open(&dir.0).await.unwrap();
-    assert_eq!(user_version(&pool).await, version);
+    assert_eq!(applied(&pool).await, before);
     pool.close().await;
 }
 

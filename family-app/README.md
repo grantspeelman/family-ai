@@ -19,9 +19,13 @@ It listens on `127.0.0.1:8080`. Set `FAMILY_APP_ADDR` to listen elsewhere, for e
 
 ## Database
 
-On start, before it listens, the app opens or creates `family.db` in `FAMILY_APP_DATA_DIR` and applies pending migrations (`family_app::db::open`). Each migration runs once, in its own transaction, and records the schema version in `PRAGMA user_version`. Migrations are listed in `src/db.rs`; append new ones, never edit a shipped one. A restart reuses the same file and data.
+On start, before it listens, the app opens or creates `family.db` in `FAMILY_APP_DATA_DIR` and applies pending migrations (`family_app::db::open`). Migrations run through sqlx's migrator. Each one runs once, in its own transaction, and sqlx records it in the `_sqlx_migrations` table. A restart reuses the same file and data.
 
-Schema version 1 has one table:
+### Adding a migration
+
+Add a file to `migrations/` named with the next number and a short description, for example `migrations/0002_add_tags.sql`. `sqlx::migrate!` embeds the files at compile time, and `build.rs` makes Cargo rebuild when `migrations/` changes. Never edit or rename a migration that has shipped: sqlx stores each one's checksum and refuses to start if a file has changed.
+
+Migration 1 (`migrations/0001_create_notes.sql`) creates the one table:
 
 ```sql
 notes(id INTEGER PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)

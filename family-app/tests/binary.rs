@@ -119,9 +119,13 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
 
     let db_path = dir.0.join("family.db");
     assert!(db_path.is_file());
+    // Read-only, so this check cannot create or migrate anything itself.
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let pool = family_app::db::open(&dir.0).await.unwrap();
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&db_path)
+            .read_only(true);
+        let pool = sqlx::SqlitePool::connect_with(options).await.unwrap();
         let count: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'",
         )
@@ -129,6 +133,12 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
         .await
         .unwrap();
         assert_eq!(count, 1);
+        let success: bool =
+            sqlx::query_scalar("SELECT success FROM _sqlx_migrations WHERE version = 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(success);
         pool.close().await;
     });
 }
