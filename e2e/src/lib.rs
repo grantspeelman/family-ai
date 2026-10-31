@@ -128,7 +128,7 @@ impl Starter<'_> {
         for (key, value) in extra_env {
             command.env(key, value);
         }
-        let child = command.spawn().map_err(|err| {
+        let child = spawn_retrying_busy(&mut command).await.map_err(|err| {
             format!(
                 "{name}: starting {}: {err} (build it first, see e2e/README.md)",
                 binary.display()
@@ -156,6 +156,23 @@ impl Starter<'_> {
                 ));
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+}
+
+/// Spawns `command`, retrying briefly on "Text file busy" (ETXTBSY), which a
+/// just-written executable can hit while a fork elsewhere still holds its
+/// write handle.
+async fn spawn_retrying_busy(command: &mut Command) -> std::io::Result<Child> {
+    const ETXTBSY: i32 = 26;
+    let mut attempts = 0;
+    loop {
+        match command.spawn() {
+            Err(err) if err.raw_os_error() == Some(ETXTBSY) && attempts < 50 => {
+                attempts += 1;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            result => return result,
         }
     }
 }

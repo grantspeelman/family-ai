@@ -7,6 +7,11 @@ use std::time::{Duration, Instant};
 
 use e2e::Services;
 
+/// Runs these tests one at a time. Each writes an executable script and then
+/// spawns it; a fork in a parallel test while another test's script is open
+/// for writing would make that spawn fail with "Text file busy" (ETXTBSY).
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn fake_bin_dir(test: &str, script: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("e2e-harness-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -24,6 +29,7 @@ fn pid_alive(pid_file: &Path) -> bool {
 
 #[tokio::test]
 async fn unhealthy_service_times_out_naming_it_and_is_killed() {
+    let _serial = SERIAL.lock().await;
     let dir = fake_bin_dir(
         "timeout",
         "#!/bin/sh\necho $$ > \"$(dirname \"$0\")/pid\"\nexec sleep 60\n",
@@ -48,6 +54,7 @@ async fn unhealthy_service_times_out_naming_it_and_is_killed() {
 
 #[tokio::test]
 async fn service_that_exits_early_is_named() {
+    let _serial = SERIAL.lock().await;
     let dir = fake_bin_dir("exit", "#!/bin/sh\nexit 3\n");
     let err = match Services::start_from(&dir, Duration::from_secs(10)).await {
         Ok(_) => panic!("a service that exits must not be reported healthy"),
@@ -62,6 +69,7 @@ async fn service_that_exits_early_is_named() {
 
 #[tokio::test]
 async fn missing_binary_is_named() {
+    let _serial = SERIAL.lock().await;
     let err = match Services::start_from(Path::new("/nonexistent-e2e-bin"), Duration::from_secs(1))
         .await
     {
