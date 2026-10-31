@@ -9,6 +9,7 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 # cargo loads every workspace member, even for -p registry, so each member's
 # directory must be here. Add new members to this list.
+COPY e2e e2e
 COPY family-app family-app
 COPY fly-mock fly-mock
 COPY registry registry

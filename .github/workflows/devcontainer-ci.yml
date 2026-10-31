@@ -422,12 +422,41 @@ jobs:
   # when a needed job failed; without it a failed job would leave this one skipped,
   # and GitHub can treat a skipped required check as passing. Anything other than
   # `success` (failed, cancelled, skipped) fails it, and so does an empty list.
+  # The end-to-end suite: builds the registry, Fly mock and family app binaries,
+  # then runs the e2e crate's ignored tests, which start all three on free local
+  # ports and check each is healthy. The other jobs' plain `cargo test` skips
+  # those tests because they are `#[ignore]`d. cargo runs in the registry
+  # Dockerfile's `toolchain` stage, like the `registry` job. Run as the checkout's
+  # owner so target/ is writable and owned by the runner.
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build toolchain image
+        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
+
+      - name: End-to-end tests
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
+            bash -euo pipefail -c '
+              cargo build --locked -p registry -p fly-mock -p family-app
+              cargo test --locked -p e2e -- --include-ignored
+            '
+
   ci:
     name: ci
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication, complexity]
+    needs: [image, smoke, workflows, registry, e2e, cargo-deny, coverage, duplication, complexity]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
