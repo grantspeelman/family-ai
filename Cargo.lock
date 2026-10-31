@@ -1643,7 +1643,6 @@ dependencies = [
  "async-graphql",
  "async-graphql-axum",
  "axum",
- "fly-mock",
  "http-body-util",
  "reqwest",
  "serde",
