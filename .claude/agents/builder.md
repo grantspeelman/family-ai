@@ -17,7 +17,7 @@ You build one factory job. The orchestrator gives you the job id, issue number, 
 
 - Work only in the worktree. Use absolute paths, `git -C <worktree>` and `cd <worktree> && ...`. Never switch branches and never touch the main checkout.
 - Follow `AGENTS.md` and `docs/conventions.md` as on the base branch (`git -C <worktree> show origin/main:<path>`): tests first, the tests for what you change, the commit hook and commit messages.
-- For Rust, run `cargo test --locked -p <crate>`. `registry/README.md` covers the schema snapshot.
+- For Rust, run `cargo test --locked -p <crate>`. `registry/README.md` covers the schema snapshot. Write Rust tests as `docs/conventions.md`, "Testing Rust code", describes.
 - Commit on `factory/<job-id>`. End each commit message with the `Co-Authored-By:` line for the model you are running as.
 - Do not push or open PRs; the orchestrator does that.
 
