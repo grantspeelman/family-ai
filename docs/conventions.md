@@ -49,6 +49,16 @@ Bash scripts are tested with [bats-core](https://github.com/bats-core/bats-core)
 
 Covered today: `.devcontainer/start.sh`, `postStartCommand.sh`, `entrypoint.sh`, the token-file check, and `.lefthook/placeholder.sh`. `.lefthook/workflows.bats` and `.lefthook/rust-lint.bats` test the hook's workflow and Rust lint steps with real commits in disposable repos. Tests shim external commands (`docker`, `ssh-agent` and so on) and use temp dirs, never the real `HOME`. `.devcontainer/smoke-test.sh` is the deliberate exception: it builds and starts a real container, so it needs Docker and a network and CI runs it as its own step.
 
+## Testing Rust code
+
+Rust tests normally live in each crate's `tests/` directory. These are integration tests: each file is its own test crate and sees only the crate's public API, as an outside user would. Run them with `cargo test --locked -p <crate>`; CI runs the whole workspace.
+
+- **Test public, observable behaviour.** Call the library's public API and check its visible effects (return values, errors, files on disk, database rows), or run the built binary and check what it does from outside (exit code, stdout and stderr, HTTP responses).
+- **Name files after the behaviour they cover** (today `family-app/tests/health.rs` and `registry/tests/api.rs`), not after source modules. There is no one-to-one mapping between `src/` and `tests/` files.
+- **Shared helpers go in `tests/common/mod.rs`.** Cargo does not build that as its own test crate; each test file that needs it declares `mod common;`.
+- **Don't test private internals from `tests/`.** If something can only be tested by reaching inside, test it through its public effects instead. Making an item `pub` just for a test is a design choice; make it deliberately.
+- **Unit tests are the exception.** A `#[cfg(test)]` module inside the source file is for private logic that is hard to reach through the public API. None exist yet.
+
 ## Workflow safety
 
 Anyone can open a PR against this public repo, so no workflow may run untrusted code with secrets or write access available. Every workflow in `.github/workflows/` follows these rules. A new or changed workflow is checked against them in review, and the `workflows` CI job checks the mechanical ones.
