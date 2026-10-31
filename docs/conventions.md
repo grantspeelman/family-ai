@@ -51,10 +51,11 @@ Covered today: `.devcontainer/start.sh`, `postStartCommand.sh`, `entrypoint.sh`,
 
 ## Testing Rust code
 
-Rust tests live in each crate's `tests/` directory. These are integration tests: each file is its own test crate and sees only the crate's public API, as an outside user would. Run them with `cargo test --locked -p <crate>`; CI runs the whole workspace.
+Rust tests normally live in each crate's `tests/` directory. These are integration tests: each file is its own test crate and sees only the crate's public API, as an outside user would. Run them with `cargo test --locked -p <crate>`; CI runs the whole workspace.
 
 - **Test public, observable behaviour.** Call the library's public API and check its visible effects (return values, errors, files on disk, database rows), or run the built binary and check what it does from outside (exit code, stdout and stderr, HTTP responses).
-- **Name files after the behaviour they cover** (`storage.rs`, `binary.rs`, `health.rs`, `api.rs`), not after source modules. There is no one-to-one mapping between `src/` and `tests/` files.
+- **Name files after the behaviour they cover** (today `family-app/tests/health.rs` and `registry/tests/api.rs`), not after source modules. There is no one-to-one mapping between `src/` and `tests/` files.
+- **Shared helpers go in `tests/common/mod.rs`.** Cargo does not build that as its own test crate; each test file that needs it declares `mod common;`.
 - **Don't test private internals from `tests/`.** If something can only be tested by reaching inside, test it through its public effects instead. Making an item `pub` just for a test is a design choice; make it deliberately.
 - **Unit tests are the exception.** A `#[cfg(test)]` module inside the source file is for private logic that is hard to reach through the public API. None exist yet.
 
