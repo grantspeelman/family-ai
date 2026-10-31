@@ -7,8 +7,10 @@ FROM rust:1.93-slim-trixie AS toolchain
 FROM toolchain AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
-# Every workspace member must be present for cargo to load the workspace.
+# cargo loads every workspace member, even for -p registry, so each member's
+# directory must be here. Add new members to this list.
 COPY family-app family-app
+COPY fly-mock fly-mock
 COPY registry registry
 RUN cargo build --release --locked -p registry
 
