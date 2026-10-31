@@ -29,7 +29,7 @@ async fn unhealthy_service_times_out_naming_it_and_is_killed() {
         "#!/bin/sh\necho $$ > \"$(dirname \"$0\")/pid\"\nexec sleep 60\n",
     );
     let started = Instant::now();
-    let err = match Services::start_from(&dir, Duration::from_millis(500)).await {
+    let err = match Services::start_from(&dir, Duration::from_secs(2)).await {
         Ok(_) => panic!("a service that never answers must not be reported healthy"),
         Err(err) => err,
     };

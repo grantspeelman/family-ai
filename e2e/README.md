@@ -7,7 +7,7 @@ The end-to-end suite. A test-only crate (no binary, not published) that runs the
 ## Tests
 
 - `tests/health.rs`: all three services answer their health check. It needs the built binaries, so it is `#[ignore]`d and the workspace's plain `cargo test` skips it.
-- `tests/harness.rs`: the harness's failure paths, with stand-in scripts. These run in any `cargo test`.
+- `tests/harness.rs`: the harness's failure paths, with stand-in scripts. These run in any `cargo test`. They use `sh` scripts and `/proc`, so they are Linux-only (fine in the dev container and CI).
 
 ## Run locally
 
