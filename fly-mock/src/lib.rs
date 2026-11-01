@@ -8,6 +8,7 @@ use std::{
     collections::{HashMap, HashSet},
     net::Ipv6Addr,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
@@ -65,14 +66,27 @@ fn lock(store: &Store) -> MutexGuard<'_, Inner> {
 
 #[derive(Deserialize)]
 struct CreateApp {
-    app_name: String,
+    name: String,
     #[allow(dead_code, reason = "accepted as Fly does; the mock has no orgs")]
     org_slug: String,
 }
 
-async fn create_app(State(store): State<Store>, Json(req): Json<CreateApp>) -> StatusCode {
-    lock(&store).apps.entry(req.app_name).or_default();
-    StatusCode::CREATED
+async fn create_app(State(store): State<Store>, Json(req): Json<CreateApp>) -> Response {
+    let mut inner = lock(&store);
+    if inner.apps.contains_key(&req.name) {
+        let body = json!({
+            "error": format!("app name already taken: {}", req.name),
+            "status": "name_taken",
+        });
+        return (StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response();
+    }
+    let n = inner.next();
+    inner.apps.insert(req.name, HashSet::new());
+    let created_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let body = json!({ "id": format!("app_{n:016x}"), "created_at": created_at });
+    (StatusCode::CREATED, Json(body)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -143,6 +157,9 @@ impl TryFrom<Value> for Config {
         #[derive(Deserialize)]
         struct Mount {
             volume: String,
+        }
+        if !raw.is_object() {
+            return Err(serde::de::Error::custom("config must be an object"));
         }
         let Mounts { mounts } = serde_json::from_value(raw.clone())?;
         let volumes = mounts.into_iter().map(|m| m.volume).collect();
