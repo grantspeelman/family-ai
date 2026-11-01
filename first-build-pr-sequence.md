@@ -68,6 +68,7 @@ PRs 2–9 are queued on the factory board as issues #45–#62. The Flutter skele
 - The front end comes before the end-to-end suite. #84 is blocked by #83, #60 and #61. #85 is blocked by #84.
 - The e2e setup (#53) is blocked by #84, #85, #58 and #59, and by the closed #50 and #51. It lands after PR 11. It is not done.
 - #53 was re-specced. Its Chrome test always covers the form, the waiting state and the direct handoff. It owns the harness, the registry-to-Fly-mock wiring and teardown.
+- #53 is human-merged, because it adds a CI job and widens the allowed paths.
 - #62 follows #53 and uses its harness. #62 was trimmed to an API-level round trip, with exact contract checks and step-by-step failure messages.
 - PR #82, the backend-only e2e skeleton, was closed unmerged.
 - Once the e2e setup lands, the end-to-end suite will run on every PR as part of the required `ci` check.
@@ -90,7 +91,7 @@ PRs 2–9 are queued on the factory board as issues #45–#62. The Flutter skele
 | #50 | Fly mock crate skeleton | PR 4 | #45, #46 | skim |
 | #51 | family app crate skeleton | PR 6 | #45, #46 | skim |
 | #52 | registry dependencies | PRs 3, 5 | #50 | skim |
-| #53 | end-to-end setup: harness, wiring, teardown, Chrome test | PR 9 | #50, #51, #84, #85, #58, #59 | skim |
+| #53 | end-to-end setup: harness, wiring, teardown, Chrome test | PR 9 | #50, #51, #84, #85, #58, #59 | close read |
 | #54 | Fly mock: create app, volume, Machine | PR 4 | #50 | close read |
 | #55 | family app: SQLite on its volume | PR 6 | #51 | close read |
 | #56 | registry: account store | PR 3 | #52 | close read |
