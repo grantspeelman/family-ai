@@ -12,6 +12,10 @@ cargo run -p fly-mock
 
 It listens on `127.0.0.1:4280`, the port Fly's own Machines API uses on its private network, so it does not clash with the registry on `8080`. Set `FLY_MOCK_ADDR` to change that, for example `FLY_MOCK_ADDR=0.0.0.0:9001 cargo run -p fly-mock`. It prints the address it is listening on. A port of `0` lets the OS pick a free port. Ctrl-C or SIGTERM stops it with exit code 0.
 
+## How it is used
+
+fly-mock runs as its own process, started with `cargo run -p fly-mock` and with its address set by `FLY_MOCK_ADDR`. It stands in for Fly's Machines API in end-to-end tests and local dev. The registry reaches it the same way it reaches real Fly: through its Fly API base URL, set to the mock's address. No crate depends on it, and registry tests do not link against it.
+
 ## Endpoints
 
 | Endpoint | What it does |
