@@ -11,6 +11,15 @@ if [ -d /workspace/.git ]; then
   lefthook install
 fi
 
+# Git identity from the host's GIT_USER_NAME / GIT_USER_EMAIL (see README,
+# "Git identity"). A value already in the global config is kept.
+for key in name email; do
+  var="GIT_USER_${key^^}"
+  if [ -z "$(git config --global "user.${key}" || true)" ] && [ -n "${!var:-}" ]; then
+    git config --global "user.${key}" "${!var}"
+  fi
+done
+
 # Permission prompts off by default. This is the container's own Claude config,
 # so the host's settings are untouched. Only the one key is set, leaving any
 # other settings you have added in the volume alone.
@@ -40,6 +49,10 @@ fi
 
 if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ]; then
   echo "No GitHub token in the container (see .devcontainer/README.md, GitHub token): gh (PRs, issues) is unauthenticated."
+fi
+
+if [ -z "$(git config --global user.name || true)" ] || [ -z "$(git config --global user.email || true)" ]; then
+  echo "No git identity in the container: commits will fail. Set GIT_USER_NAME and GIT_USER_EMAIL on the host and rebuild (see .devcontainer/README.md, Git identity)."
 fi
 
 if [ ! -s "${config_dir}/.credentials.json" ]; then

@@ -25,7 +25,7 @@ setup() {
     export GIT_CONFIG_GLOBAL="$BATS_TEST_TMPDIR/gitconfig"
     export GIT_CONFIG_SYSTEM="$BATS_TEST_TMPDIR/gitconfig"
     export CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/claude"
-    unset SSH_AUTH_SOCK GH_TOKEN GITHUB_TOKEN SSH_ADD_STATUS
+    unset SSH_AUTH_SOCK GH_TOKEN GITHUB_TOKEN SSH_ADD_STATUS GIT_USER_NAME GIT_USER_EMAIL
     # A logged-in, tokened, agent-less baseline is set per test as needed.
     echo '{}' > "$CLAUDE_CONFIG_DIR/.credentials.json"
 }
@@ -153,10 +153,43 @@ setup() {
     [[ "$output" == *"Claude is not logged in yet"* ]]
 }
 
-@test "fully set up: prints nothing and touches no real git config" {
+@test "fully set up: prints nothing" {
+    git config --global user.name "Dummy Name"
+    git config --global user.email dummy@example.invalid
     GH_TOKEN=dummy SSH_AUTH_SOCK=/dummy.sock run "$SCRIPT"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
-    # Only a guard: the script is not expected to write the global git config here.
+}
+
+@test "GIT_USER_NAME and GIT_USER_EMAIL set: written to the global git config" {
+    GIT_USER_NAME="Dummy Name" GIT_USER_EMAIL=dummy@example.invalid run "$SCRIPT"
+    [ "$status" -eq 0 ]
+    [ "$(git config --global user.name)" = "Dummy Name" ]
+    [ "$(git config --global user.email)" = dummy@example.invalid ]
+    [[ "$output" != *"No git identity"* ]]
+}
+
+@test "existing git identity is kept" {
+    git config --global user.name "Existing Name"
+    git config --global user.email existing@example.invalid
+    GIT_USER_NAME="Dummy Name" GIT_USER_EMAIL=dummy@example.invalid run "$SCRIPT"
+    [ "$status" -eq 0 ]
+    [ "$(git config --global user.name)" = "Existing Name" ]
+    [ "$(git config --global user.email)" = existing@example.invalid ]
+}
+
+@test "no git identity and no GIT_USER_*: prints how to set it and writes nothing" {
+    run "$SCRIPT"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No git identity"* ]]
+    [[ "$output" == *"GIT_USER_NAME"* ]]
     [ ! -s "$GIT_CONFIG_GLOBAL" ]
+}
+
+@test "only GIT_USER_NAME set: name written, email still reported missing" {
+    GIT_USER_NAME="Dummy Name" run "$SCRIPT"
+    [ "$status" -eq 0 ]
+    [ "$(git config --global user.name)" = "Dummy Name" ]
+    [[ "$output" == *"No git identity"* ]]
+    [[ "$output" == *"GIT_USER_EMAIL"* ]]
 }
