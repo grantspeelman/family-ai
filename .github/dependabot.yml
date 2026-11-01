@@ -43,6 +43,17 @@ updates:
       - dependency-name: "rust"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
+  # The Flutter app's Dart packages: app/pubspec.yaml and app/pubspec.lock. The
+  # Flutter SDK itself is pinned by hand in .devcontainer/Dockerfile.
+  - package-ecosystem: "pub"
+    directory: "/app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "app"
+
   # Rust crates in the Cargo workspace. Dependabot reads the root Cargo.toml and
   # Cargo.lock, and follows the workspace members from there.
   - package-ecosystem: "cargo"

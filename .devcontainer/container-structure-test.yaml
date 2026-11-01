@@ -6,7 +6,7 @@
 # Image design:
 #   • Base ubuntu:26.04. Node 22, Python 3, Java 25, Rust 1.93, SQLite, gosu and Docker come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
-#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny, PMD and bats-core are pinned, checksummed downloads, pinned exactly.
+#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny, PMD, bats-core, Flutter, Chrome and chromedriver are pinned, checksummed downloads, pinned exactly.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
 #   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
@@ -182,6 +182,22 @@ commandTests:
         sys.exit(result.returncode)
     expectedOutput: ['300 tokens']
     exitCode: 4
+
+  # Run as vscode, as the entrypoint does: Flutter warns when run as root.
+  - name: flutter is 3.47.9 (FLUTTER_VERSION)
+    command: gosu
+    args: ["vscode", "flutter", "--version"]
+    expectedOutput: ['Flutter 3\.47\.9 ']
+
+  - name: Chrome is 156.0.8078.80 (CHROME_VERSION)
+    command: google-chrome
+    args: ["--version"]
+    expectedOutput: ['Google Chrome for Testing 156\.0\.8078\.80']
+
+  - name: chromedriver is 156.0.8078.80 (CHROME_VERSION, same release as Chrome)
+    command: chromedriver
+    args: ["--version"]
+    expectedOutput: ['ChromeDriver 156\.0\.8078\.80']
 
   - name: shellcheck installed (actionlint shell checks)
     command: shellcheck
