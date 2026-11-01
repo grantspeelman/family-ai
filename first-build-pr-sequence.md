@@ -43,7 +43,7 @@ Also in PR 0:
 | 7 | Family app tooling | Folded into PR 2. The tooling is workspace-wide, so the family app is covered when it joins the workspace. |
 | 8 | Round-trip endpoint | Write a row, read it back — real proof of the database round trip, not a hello-world reply. |
 | 9 | End-to-end test suite | Registry + mock + family app together, asserting the full chain end to end. |
-| 10 | Front end: form and waiting state | Account creation form, waiting state while the Machine boots. |
+| 10 | Front end: form and waiting state | Account creation form, waiting state while the Machine boots. Preceded by the Flutter skeleton PR. |
 | 11 | Front end: direct handoff | Once ready, talks directly to the family app's address (not proxied through the registry) and shows the real response. |
 | 12 | Persistence re-check | After an idle period (an hour or more), re-run the registry flow and confirm the earlier row is still on the volume. |
 
@@ -64,7 +64,12 @@ PRs 2–9 are queued on the factory board as issues #45–#62. Each spec opens w
 - One SQLite stack for the workspace: `sqlx`, with migrations as `.sql` files under each app's `migrations/`.
 - Accounts take an email and a family name. The email is unique, ignoring letter case. Keycloak is the planned identity provider and comes later; the account store is shaped so its subject id can take over the identity. Until auth exists, the polling query `accountStatus` returns only status and address, never personal data.
 - The end-to-end suite runs on every PR as part of the required `ci` check.
-- The front end (PRs 10–11) and PR 12 are planned once the front-end stack is chosen.
+- The front end is Flutter (Dart). One codebase serves the SPA web app and the iPhone and Android apps.
+- End-to-end UI tests use Flutter's `integration_test` package. They run on Chrome with `flutter drive` and chromedriver, against the real registry, Fly mock and family app started by the e2e harness (#53). The same tests can later run on iOS and Android simulators.
+- CI builds and tests the web target only for now, on Linux in the dev container image. Android (emulator) and iOS (macOS runner) builds come later.
+- The Flutter app lives in a new top-level `app/` directory, outside the Cargo workspace. A skeleton PR comes first. It adds the Flutter SDK to the dev container, an `app` CI job in `ci`'s `needs:`, and widens the factory allowed paths to Dart files in `app/lib`, `app/test` and `app/integration_test`, plus `app/README.md`. It is human-merged, like the crate skeletons.
+- PRs 10 and 11 build on that skeleton.
+- PR 12 is still to be planned.
 
 | Issue | Job | From PR | Blocked by | Review |
 | --- | --- | --- | --- | --- |
