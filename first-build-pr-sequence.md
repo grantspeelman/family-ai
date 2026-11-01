@@ -2,7 +2,7 @@
 
 *Last updated 1 November 2026.*
 
-Breaks the account-to-VM skeleton spec into an ordered sequence of PRs for agentic development, with tooling and testing built in from the start rather than bolted on.
+Breaks the account-to-VM skeleton spec into a numbered sequence of PRs for agentic development, with tooling and testing built in from the start rather than bolted on.
 
 ## PR 0 — Foundation
 
@@ -188,4 +188,4 @@ This rule applies as a standing step throughout the build, not just at the two b
 **Open questions:**
 
 - Whether to require a CLA (or similar) before accepting outside contributions. Without one, the copyright holder cannot easily relicense or dual-license later, and App Store distribution of the native clients gets harder.
-- Third-party license check for the front end's dependencies, once its stack is chosen.
+- Third-party license check for the Flutter app's dependencies. `cargo-deny` doesn't cover them.
