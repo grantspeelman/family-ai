@@ -19,6 +19,10 @@ services:
     env_file:
       - path: ${HOME}/.config/family-ai/gh.env
         required: false
+    # Git identity, from the host shell (see README, "Git identity").
+    environment:
+      GIT_USER_NAME: ${GIT_USER_NAME:-}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-}
 
 volumes:
   # A fixed name, so the Claude login is shared by every container for this

@@ -114,6 +114,23 @@ after a rotation (for VS Code, rebuild or reopen the container).
 If the file is missing, `start.sh` warns that `gh` will be unauthenticated and
 points here.
 
+## Git identity
+
+The container has no git `user.name` or `user.email` of its own. Export them in
+the host shell that runs `start.sh` (or launches VS Code), for example in your
+shell profile:
+
+```sh
+export GIT_USER_NAME="Your Name"
+export GIT_USER_EMAIL="you@users.noreply.github.com"
+```
+
+Compose passes them into the container, and `postStartCommand.sh` writes them
+with `git config --global` on start. A value already in the container's global
+git config is kept. Without them, commits fail and the start-up output says so.
+The container takes its environment when it is created, so recreate it
+(`start.sh --rebuild`, or rebuild in VS Code) after setting them.
+
 ## Project toolchain
 
 One container holds everything, so the registry app, the Fly mock and the
