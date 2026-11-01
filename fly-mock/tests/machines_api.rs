@@ -185,3 +185,20 @@ async fn separate_apps_do_not_share_state() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_fly_error(&body);
 }
+
+#[tokio::test]
+async fn malformed_mounts_get_axums_default_rejection() {
+    let app = fly_mock::app();
+    create_app(&app, "fam-1").await;
+    let request = Request::post("/v1/apps/fam-1/machines")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({"config": {"image": "img", "mounts": "nope"}}).to_string(),
+        ))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert!(response.status().is_client_error());
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    // Plain text, not Fly's JSON error body.
+    assert!(serde_json::from_slice::<Value>(&bytes).is_err());
+}

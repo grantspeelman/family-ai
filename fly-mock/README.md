@@ -23,7 +23,7 @@ Paths and JSON follow Fly's Machines API (base `https://api.machines.dev`), so p
 | Endpoint | Request body | Response |
 | --- | --- | --- |
 | `GET /healthz` | none | `200` with the body `ok`. |
-| `POST /v1/apps` | `{"app_name": "...", "org_slug": "..."}` | `201 Created`, empty body. Records the app. |
+| `POST /v1/apps` | `{"app_name": "...", "org_slug": "..."}` | `201 Created`, empty body. Records the app. Creating an existing name again also returns `201` and keeps its volumes. |
 | `POST /v1/apps/{app_name}/volumes` | `{"name": "...", "region": "...", "size_gb": <int>}` | `200` with a Volume: `id` (`vol_` and a unique suffix), `name`, `region`, `size_gb`, `state` (`"created"`). |
 | `POST /v1/apps/{app_name}/machines` | `{"name"?: "...", "region"?: "...", "config": {"image": "...", "env"?: {...}, "mounts"?: [{"volume": "vol_...", "path": "..."}]}}` | `200` with a Machine: `id` (14 lowercase hex characters, unique), `name` (from the request, or generated), `state` (`"created"`), `region` (from the request, or `mock`), `private_ip` (a fake, unique IPv6 address in `fdaa::/16`; nothing listens on it), `config` (the request's `config`, echoed back). |
 
@@ -36,7 +36,7 @@ Errors use Fly's error body, `{"error": "<message>"}`:
 - `404` when the app in the path was never created (volumes and Machines).
 - `404` when a Machine's `mounts` name a volume the app does not have.
 
-Malformed request bodies get axum's default rejection, not Fly's error shape.
+Malformed request bodies (invalid JSON, a missing or wrongly typed field, a malformed `mounts`) get axum's default rejection, a `4xx` with a plain-text body, not Fly's error shape.
 
 ```sh
 curl -s http://127.0.0.1:4280/healthz
@@ -44,6 +44,13 @@ curl -s http://127.0.0.1:4280/healthz
 curl -s -XPOST http://127.0.0.1:4280/v1/apps -H 'content-type: application/json' \
   -d '{"app_name": "fam-1", "org_slug": "personal"}' -w '%{http_code}\n'
 # 201
+curl -s -XPOST http://127.0.0.1:4280/v1/apps/fam-1/volumes -H 'content-type: application/json' \
+  -d '{"name": "data", "region": "jnb", "size_gb": 1}'
+# {"id":"vol_...","name":"data","region":"jnb","size_gb":1,"state":"created"}
+# Pass the volume's id in mounts[].volume:
+curl -s -XPOST http://127.0.0.1:4280/v1/apps/fam-1/machines -H 'content-type: application/json' \
+  -d '{"config": {"image": "family-app:dev", "mounts": [{"volume": "vol_...", "path": "/data"}]}}'
+# {"id":"...","name":"machine-...","state":"created","region":"mock","private_ip":"fdaa::...","config":{...}}
 ```
 
 ## Tests
@@ -52,4 +59,4 @@ curl -s -XPOST http://127.0.0.1:4280/v1/apps -H 'content-type: application/json'
 cargo test --locked -p fly-mock
 ```
 
-`tests/health.rs` and `tests/machines_api.rs` send requests straight into the router, with no network. `tests/server.rs` runs the built binary, queries it over TCP and stops it with a signal. In CI, `cargo test --locked` at the workspace root runs both. Run `cargo deny --locked check` from the repo root to check dependency licenses, advisories, bans and sources for every workspace crate.
+`tests/health.rs` and `tests/machines_api.rs` send requests straight into the router, with no network. `tests/server.rs` runs the built binary, queries it over TCP and stops it with a signal. In CI, `cargo test --locked` at the workspace root runs them all. Run `cargo deny --locked check` from the repo root to check dependency licenses, advisories, bans and sources for every workspace crate.

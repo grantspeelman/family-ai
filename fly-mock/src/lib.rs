@@ -7,7 +7,7 @@
 use std::{
     collections::{HashMap, HashSet},
     net::Ipv6Addr,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard, PoisonError},
 };
 
 use axum::{
@@ -59,10 +59,8 @@ fn app_not_found(app_name: &str) -> Response {
     error(StatusCode::NOT_FOUND, format!("app not found: {app_name}"))
 }
 
-fn lock(store: &Store) -> std::sync::MutexGuard<'_, Inner> {
-    store
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+fn lock(store: &Store) -> MutexGuard<'_, Inner> {
+    store.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[derive(Deserialize)]
@@ -99,10 +97,11 @@ async fn create_volume(
     Json(req): Json<CreateVolume>,
 ) -> Response {
     let mut inner = lock(&store);
-    let n = inner.next();
-    let Some(volumes) = inner.apps.get_mut(&app_name) else {
+    if !inner.apps.contains_key(&app_name) {
         return app_not_found(&app_name);
-    };
+    }
+    let n = inner.next();
+    let volumes = inner.apps.entry(app_name).or_default();
     let id = format!("vol_{n:016x}");
     volumes.insert(id.clone());
     Json(Volume {
@@ -119,22 +118,36 @@ async fn create_volume(
 struct CreateMachine {
     name: Option<String>,
     region: Option<String>,
-    /// Kept as raw JSON so it is echoed back exactly as sent.
-    config: Value,
+    config: Config,
 }
 
-/// The parts of a Machine config the mock checks.
+/// A Machine config: the raw JSON, echoed back exactly as sent, and the
+/// volume ids it mounts. A malformed `mounts` fails the `Json` extractor, so
+/// axum's default rejection answers it.
 #[derive(Deserialize)]
-struct MachineConfig {
-    #[allow(dead_code, reason = "required as Fly requires it; only echoed back")]
-    image: String,
-    #[serde(default)]
-    mounts: Vec<Mount>,
+#[serde(try_from = "Value")]
+struct Config {
+    raw: Value,
+    volumes: Vec<String>,
 }
 
-#[derive(Deserialize)]
-struct Mount {
-    volume: String,
+impl TryFrom<Value> for Config {
+    type Error = serde_json::Error;
+
+    fn try_from(raw: Value) -> Result<Self, Self::Error> {
+        #[derive(Deserialize)]
+        struct Mounts {
+            #[serde(default)]
+            mounts: Vec<Mount>,
+        }
+        #[derive(Deserialize)]
+        struct Mount {
+            volume: String,
+        }
+        let Mounts { mounts } = serde_json::from_value(raw.clone())?;
+        let volumes = mounts.into_iter().map(|m| m.volume).collect();
+        Ok(Self { raw, volumes })
+    }
 }
 
 #[derive(Serialize)]
@@ -152,36 +165,24 @@ async fn create_machine(
     Path(app_name): Path<String>,
     Json(req): Json<CreateMachine>,
 ) -> Response {
-    let config: MachineConfig = match serde_json::from_value(req.config.clone()) {
-        Ok(config) => config,
-        Err(err) => {
-            return error(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                format!("invalid config: {err}"),
-            );
-        }
-    };
     let mut inner = lock(&store);
-    let n = inner.next();
     let Some(volumes) = inner.apps.get(&app_name) else {
         return app_not_found(&app_name);
     };
-    if let Some(mount) = config.mounts.iter().find(|m| !volumes.contains(&m.volume)) {
-        return error(
-            StatusCode::NOT_FOUND,
-            format!("volume not found: {}", mount.volume),
-        );
+    if let Some(volume) = req.config.volumes.iter().find(|v| !volumes.contains(*v)) {
+        return error(StatusCode::NOT_FOUND, format!("volume not found: {volume}"));
     }
+    let n = inner.next();
     let id = format!("{n:014x}");
     // Fly gives Machines an address on its private IPv6 network (fdaa::/16).
-    let private_ip = Ipv6Addr::new(0xfdaa, 0, 0, 0, 0, 0, (n >> 16) as u16, n as u16);
+    let private_ip = Ipv6Addr::from((0xfdaa_u128 << 112) | u128::from(n));
     Json(Machine {
         name: req.name.unwrap_or_else(|| format!("machine-{id}")),
         id,
         state: "created",
         region: req.region.unwrap_or_else(|| DEFAULT_REGION.to_string()),
         private_ip: private_ip.to_string(),
-        config: req.config,
+        config: req.config.raw,
     })
     .into_response()
 }
