@@ -23,9 +23,20 @@ fail() {
 }
 worktree=$1
 
+# Refuse to run from inside the checkout being checked: the check must not come
+# from the job's own branch. Compares resolved paths of the whole checkout, with
+# a trailing slash so /a/b does not match /a/bc.
+self=$(realpath -e -- "$0") || fail
+top=$(git -C "$worktree" rev-parse --show-toplevel) || fail
+top=$(realpath -e -- "$top") || fail
+case "${self%/*}/" in
+"${top%/}/"*) fail ;;
+esac
+
+# Quoted paths never match the allowed list, so unusual names always get listed.
 f=$(git -C "$worktree" fetch -q origin main &&
-    git -C "$worktree" diff --name-only --no-renames origin/main...HEAD) &&
-    r=$(git -C "$worktree" diff --raw --no-renames origin/main...HEAD) || fail
+    git -C "$worktree" -c core.quotepath=true diff --name-only --no-renames origin/main...HEAD) &&
+    r=$(git -C "$worktree" -c core.quotepath=true diff --raw --no-renames origin/main...HEAD) || fail
 
 # Raw lines look like ":<old mode> <new mode> <old id> <new id> <status>\t<path>".
 # 120000 is a symlink and 160000 a submodule.

@@ -4,7 +4,7 @@
 bats_require_minimum_version 1.5.0
 
 setup() {
-    REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+    REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../../.." && pwd)"
     SCRIPT="$REPO_ROOT/.claude/skills/factory/allowed-paths.sh"
     ORIGIN="$BATS_TEST_TMPDIR/origin.git"
     WORKTREE="$BATS_TEST_TMPDIR/worktree"
@@ -120,6 +120,63 @@ commit_all() {
 
 @test "a job with no changes is clean" {
     run "$SCRIPT" "$WORKTREE"
+    [ "$status" -eq 1 ]
+    [ -z "$output" ]
+}
+
+@test "a non-ASCII filename in an allowed directory is listed" {
+    # Set the other way here to show the script's own setting decides.
+    git config core.quotepath false
+    printf 'x\n' > "registry/src/caf$(printf '\303\251').rs"
+    commit_all
+    run "$SCRIPT" "$WORKTREE"
+    [ "$status" -eq 0 ]
+    [ "$output" = '"registry/src/caf\303\251.rs"' ]
+}
+
+@test "a filename with a newline in an allowed directory is listed" {
+    printf 'x\n' > "registry/src/a"$'\n'"b.rs"
+    commit_all
+    run "$SCRIPT" "$WORKTREE"
+    [ "$status" -eq 0 ]
+    [ "$output" = '"registry/src/a\nb.rs"' ]
+}
+
+@test "a copy of the script inside the worktree fails the check" {
+    mkdir -p .claude/skills/factory
+    cp "$SCRIPT" .claude/skills/factory/
+    run .claude/skills/factory/allowed-paths.sh "$WORKTREE"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"check failed"* ]]
+}
+
+@test "a copy inside the worktree fails when given a subdirectory of it" {
+    cp "$SCRIPT" registry/
+    run registry/allowed-paths.sh "$WORKTREE/registry/src"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"check failed"* ]]
+}
+
+@test "a copy inside the worktree fails when the argument is a symlink to it" {
+    cp "$SCRIPT" registry/
+    ln -s "$WORKTREE" "$BATS_TEST_TMPDIR/link"
+    run registry/allowed-paths.sh "$BATS_TEST_TMPDIR/link"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"check failed"* ]]
+}
+
+@test "a symlink outside the worktree to a copy inside it fails the check" {
+    cp "$SCRIPT" registry/
+    ln -s "$WORKTREE/registry/allowed-paths.sh" "$BATS_TEST_TMPDIR/check.sh"
+    run "$BATS_TEST_TMPDIR/check.sh" "$WORKTREE"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"check failed"* ]]
+}
+
+@test "a script in a directory that only shares the worktree's name prefix runs" {
+    mkdir "${WORKTREE}c"
+    cp "$SCRIPT" "${WORKTREE}c/"
+    run "${WORKTREE}c/allowed-paths.sh" "$WORKTREE"
     [ "$status" -eq 1 ]
     [ -z "$output" ]
 }
