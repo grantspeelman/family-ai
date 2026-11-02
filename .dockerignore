@@ -6,3 +6,5 @@
 .env
 .env.*
 .devcontainer/.env
+app/.dart_tool
+app/build

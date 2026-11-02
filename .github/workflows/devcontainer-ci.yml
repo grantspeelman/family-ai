@@ -416,6 +416,45 @@ jobs:
           "$cpd" cpd --language rust --file-list "$file_list" \
             --minimum-tokens "$DUPLICATION_FAIL_TOKENS" --fail-on-violation --fail-on-error
 
+  # The Flutter app, web target only: analyse, widget test, web build and the Chrome
+  # integration test. Everything runs in the dev container image, so Flutter, Chrome
+  # and chromedriver are pinned in one place, the Dockerfile. The image is built with
+  # the runner's UID so that the user running Flutter owns the SDK, which Flutter
+  # writes to. Chrome's sandbox needs privileges a plain container lacks, so the test
+  # turns it off; the only page it loads is this repo's own app.
+  app:
+    name: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE: family-ai-devcontainer:app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          docker build -f .devcontainer/Dockerfile \
+            --build-arg USER_UID="$(id -u)" --build-arg USER_GID="$(id -g)" \
+            -t "$IMAGE" .
+
+      - name: Flutter checks
+        run: |
+          docker run --rm --entrypoint bash --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/repo" -w /repo/app "$IMAGE" \
+            -euo pipefail -c '
+              flutter --version
+              flutter pub get --enforce-lockfile
+              flutter analyze
+              flutter test
+              flutter build web
+              chromedriver --port=4444 &
+              flutter drive --driver=test_driver/integration_test.dart \
+                --target=integration_test/smoke_test.dart -d web-server \
+                --browser-name=chrome --web-browser-flag=--no-sandbox
+            '
+
   # The single required status check. Branch protection requires this job's name
   # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
   # a job is gated once it is in that list. `if: always()` makes this job run even
@@ -427,7 +466,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication, complexity]
+    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication, complexity, app]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
