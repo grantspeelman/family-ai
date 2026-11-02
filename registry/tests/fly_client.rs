@@ -19,7 +19,10 @@ use axum::{
     Router,
     body::Bytes,
     extract::{Request, State},
-    http::{StatusCode, header::AUTHORIZATION},
+    http::{
+        StatusCode,
+        header::{AUTHORIZATION, LOCATION},
+    },
 };
 use registry::fly::{
     CreateMachineRequest, CreateVolumeRequest, FlyClient, FlyConfig, FlyError, MachineConfig, Mount,
@@ -55,8 +58,12 @@ impl Mock {
         // Keep reading until the process exits, so stderr never fills up.
         thread::spawn(move || {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                if let Some(addr) = line.strip_prefix(LISTENING) {
-                    let _ = addr_tx.send(addr.to_owned());
+                match line.strip_prefix(LISTENING) {
+                    Some(addr) => {
+                        let _ = addr_tx.send(addr.to_owned());
+                    }
+                    // Shows why, if cargo cannot build or run the mock.
+                    None => eprintln!("{line}"),
                 }
             }
         });
@@ -256,16 +263,66 @@ async fn a_500_with_a_non_json_body_is_still_an_api_error() {
 
 #[tokio::test]
 async fn a_redirect_is_an_api_error_and_is_not_followed() {
-    let (base, log) = stub(302, "").await;
+    let (target, target_log) = stub(200, "").await;
+    let location = format!("{target}/elsewhere");
+    let app =
+        Router::new().fallback(move || async move { (StatusCode::FOUND, [(LOCATION, location)]) });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
     let error = client(&base, Some(TOKEN))
         .create_app("a", "o")
         .await
         .unwrap_err();
+
     assert!(
         matches!(error, FlyError::Api { status: 302, .. }),
         "{error:?}"
     );
-    assert_eq!(log.lock().unwrap().len(), 1);
+    assert!(target_log.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_app_name_that_is_not_a_path_segment_is_rejected_without_a_request() {
+    let (base, log) = stub(200, MACHINE_BODY).await;
+    let fly = client(&base, None);
+
+    for name in ["", ".", ".."] {
+        let errors = [
+            fly.create_app(name, "o").await.unwrap_err(),
+            fly.create_volume(name, &volume_request())
+                .await
+                .unwrap_err(),
+            fly.create_machine(name, &bare_machine_request())
+                .await
+                .unwrap_err(),
+        ];
+        for error in errors {
+            assert!(matches!(error, FlyError::InvalidAppName), "{error:?}");
+        }
+    }
+    assert!(log.lock().unwrap().is_empty());
+}
+
+#[test]
+fn an_invalid_hostname_error_names_the_variable_and_an_example_but_not_the_value() {
+    for value in ["bad value", "localhost:4280"] {
+        let text =
+            FlyConfig::from_lookup(|name| (name == "FLY_API_HOSTNAME").then(|| value.into()))
+                .unwrap_err()
+                .to_string();
+        assert!(text.contains("FLY_API_HOSTNAME"), "{text}");
+        assert!(text.contains("http://127.0.0.1:4280"), "{text}");
+        assert!(!text.contains(value), "{text}");
+    }
+}
+
+#[tokio::test]
+async fn an_empty_error_message_leaves_no_trailing_separator() {
+    let (base, _) = stub(500, "not json").await;
+    let error = client(&base, None).create_app("a", "o").await.unwrap_err();
+    assert_eq!(error.to_string(), "Fly API returned 500");
 }
 
 #[tokio::test]
@@ -301,6 +358,9 @@ async fn a_closed_port_is_a_transport_error() {
     let base = format!("http://{addr}");
     let error = client(&base, None).create_app("a", "o").await.unwrap_err();
     assert!(matches!(error, FlyError::Transport { .. }), "{error:?}");
+    let text = error.to_string();
+    assert!(text.contains(&base), "{text}");
+    assert!(text.contains("refused"), "{text}");
 }
 
 #[tokio::test]
@@ -346,8 +406,17 @@ async fn the_token_is_not_in_debug_or_error_text() {
     assert!(!format!("{closed:?}").contains(TOKEN));
 
     const ECHO: &str = r#"{"error": "bad token test-token-abc123"}"#;
+    // A wrong type makes serde quote the value in its message.
+    const WRONG_TYPE: &str = r#"{"size_gb": "test-token-abc123"}"#;
+    assert!(ECHO.contains(TOKEN) && WRONG_TYPE.contains(TOKEN));
     let mut errors = vec![closed.create_app("a", "o").await.unwrap_err()];
-    for (status, body) in [(404, ECHO), (500, ECHO), (500, "x"), (200, "x")] {
+    for (status, body) in [
+        (404, ECHO),
+        (500, ECHO),
+        (500, "x"),
+        (200, "x"),
+        (200, WRONG_TYPE),
+    ] {
         let (base, _) = stub(status, body).await;
         let fly = client(&base, Some(TOKEN));
         errors.push(fly.create_volume("a", &volume_request()).await.unwrap_err());
@@ -356,7 +425,7 @@ async fn the_token_is_not_in_debug_or_error_text() {
     let bad_token = FlyConfig::new("http://127.0.0.1:1", Some(format!("{TOKEN}\n"))).unwrap();
     errors.push(FlyClient::new(bad_token).unwrap_err());
 
-    assert_eq!(errors.len(), 7);
+    assert_eq!(errors.len(), 8);
     for error in errors {
         assert!(!error.to_string().contains(TOKEN), "{error}");
         assert!(!format!("{error:?}").contains(TOKEN), "{error:?}");

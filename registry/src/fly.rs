@@ -17,6 +17,7 @@ const HOSTNAME_VAR: &str = "FLY_API_HOSTNAME";
 const TOKEN_VAR: &str = "FLY_API_TOKEN";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 const REDACTED: &str = "[redacted]";
+const EXAMPLE_BASE_URL: &str = "http://127.0.0.1:4280";
 
 /// Where the client sends requests, and the token it sends with them.
 ///
@@ -33,10 +34,9 @@ impl FlyConfig {
     /// Builds a config from an `http` or `https` base URL, with or without a
     /// trailing slash. An empty token counts as no token.
     pub fn new(base_url: &str, api_token: Option<String>) -> Result<Self, FlyError> {
-        Ok(Self {
-            base_url: parse_base_url(base_url)?,
-            api_token: api_token.filter(|token| !token.is_empty()),
-        })
+        let base_url = parse_base_url(base_url)
+            .map_err(|why| config_error(format!("the Fly API base URL {why}")))?;
+        Ok(Self::from_parts(base_url, api_token))
     }
 
     /// Reads `FLY_API_HOSTNAME` and `FLY_API_TOKEN` from the process environment.
@@ -58,7 +58,19 @@ impl FlyConfig {
         let base_url = read(HOSTNAME_VAR)?
             .filter(|value| !value.is_empty())
             .ok_or_else(|| config_error(format!("{HOSTNAME_VAR} is not set")))?;
-        Self::new(&base_url, read(TOKEN_VAR)?)
+        let base_url = parse_base_url(&base_url).map_err(|why| {
+            config_error(format!(
+                "{HOSTNAME_VAR} {why}; set it to a value such as {EXAMPLE_BASE_URL}"
+            ))
+        })?;
+        Ok(Self::from_parts(base_url, read(TOKEN_VAR)?))
+    }
+
+    fn from_parts(base_url: Url, api_token: Option<String>) -> Self {
+        Self {
+            base_url,
+            api_token: api_token.filter(|token| !token.is_empty()),
+        }
     }
 
     /// The base URL requests go to.
@@ -81,19 +93,18 @@ impl fmt::Debug for FlyConfig {
     }
 }
 
-/// Parses the base URL. The messages never quote the value, which could hold a
-/// secret if it was set by mistake.
-fn parse_base_url(value: &str) -> Result<Url, FlyError> {
-    let invalid = |why: &str| config_error(format!("the Fly API base URL {why}"));
-    let url = Url::parse(value).map_err(|_| invalid("is not a valid URL"))?;
+/// Parses the base URL, or says why it is unusable. The reason never quotes the
+/// value, which could hold a secret if it was set by mistake.
+fn parse_base_url(value: &str) -> Result<Url, &'static str> {
+    let url = Url::parse(value).map_err(|_| "is not a valid URL")?;
     if !matches!(url.scheme(), "http" | "https") || url.host().is_none() {
-        return Err(invalid("must be an http or https URL with a host"));
+        return Err("must be an http or https URL with a host");
     }
     if !url.username().is_empty() || url.password().is_some() {
-        return Err(invalid("must not contain credentials"));
+        return Err("must not contain credentials");
     }
     if url.query().is_some() || url.fragment().is_some() {
-        return Err(invalid("must not have a query or fragment"));
+        return Err("must not have a query or fragment");
     }
     Ok(url)
 }
@@ -104,7 +115,8 @@ fn config_error(message: String) -> FlyError {
 
 /// What went wrong with a Fly API call, so the caller can decide what to do.
 ///
-/// The text of these errors never contains the `FLY_API_TOKEN` value.
+/// [`FlyError::Config`] covers a bad `FLY_API_HOSTNAME` or `FLY_API_TOKEN`. The
+/// text of these errors never contains the `FLY_API_TOKEN` value.
 #[derive(Debug)]
 pub enum FlyError {
     /// Fly returned `404`. Keeps the message from Fly's `{"error": "..."}` body,
@@ -113,35 +125,39 @@ pub enum FlyError {
     /// Fly returned any other non-2xx status. Keeps the status and the message,
     /// which is empty if the body is not in Fly's error shape.
     Api { status: u16, message: String },
-    /// The request could not be sent, or no complete response came back.
-    Transport { source: reqwest::Error },
-    /// A 2xx response whose body does not match the expected type.
-    Decode { source: reqwest::Error },
+    /// The request could not be sent, or no complete response came back. The
+    /// message has the base URL and the cause.
+    Transport { message: String },
+    /// A 2xx response whose body does not match the expected type. The message
+    /// says how, and can quote the body, with any token removed.
+    Decode { message: String },
     /// `FLY_API_HOSTNAME` is missing or not a valid URL, or the config cannot be
     /// used, for example because `FLY_API_TOKEN` cannot go in a header.
     Config { message: String },
+    /// An app name that is empty, `.` or `..`, which cannot be a URL path segment.
+    InvalidAppName,
 }
 
 impl fmt::Display for FlyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::NotFound { message } if message.is_empty() => {
+                write!(f, "Fly API returned 404")
+            }
             Self::NotFound { message } => write!(f, "Fly API returned 404: {message}"),
+            Self::Api { status, message } if message.is_empty() => {
+                write!(f, "Fly API returned {status}")
+            }
             Self::Api { status, message } => write!(f, "Fly API returned {status}: {message}"),
-            Self::Transport { source } => write!(f, "cannot reach the Fly API: {source}"),
-            Self::Decode { source } => write!(f, "unexpected Fly API response: {source}"),
+            Self::Transport { message } => write!(f, "cannot reach the Fly API: {message}"),
+            Self::Decode { message } => write!(f, "unexpected Fly API response: {message}"),
             Self::Config { message } => write!(f, "invalid Fly API config: {message}"),
+            Self::InvalidAppName => write!(f, "a Fly app name cannot be empty, `.` or `..`"),
         }
     }
 }
 
-impl std::error::Error for FlyError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Transport { source } | Self::Decode { source } => Some(source),
-            Self::NotFound { .. } | Self::Api { .. } | Self::Config { .. } => None,
-        }
-    }
-}
+impl std::error::Error for FlyError {}
 
 /// The body of a create-volume call.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -184,7 +200,9 @@ pub struct MachineConfig {
 /// A volume mounted into a Machine.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mount {
+    /// The volume's `id`, not its name.
     pub volume: String,
+    /// Where the volume appears inside the Machine.
     pub path: String,
 }
 
@@ -241,6 +259,7 @@ impl FlyClient {
 
     /// Creates an app. Succeeds on any 2xx and ignores the response body.
     pub async fn create_app(&self, app_name: &str, org_slug: &str) -> Result<(), FlyError> {
+        check_app_name(app_name)?;
         let body = CreateAppRequest {
             name: app_name,
             org_slug,
@@ -255,10 +274,11 @@ impl FlyClient {
         app_name: &str,
         request: &CreateVolumeRequest,
     ) -> Result<Volume, FlyError> {
+        check_app_name(app_name)?;
         let request = self
             .post(&["v1", "apps", app_name, "volumes"])
             .json(request);
-        decode(self.send(request).await?).await
+        self.decode(self.send(request).await?).await
     }
 
     /// Creates a Machine in an app.
@@ -267,14 +287,16 @@ impl FlyClient {
         app_name: &str,
         request: &CreateMachineRequest,
     ) -> Result<Machine, FlyError> {
+        check_app_name(app_name)?;
         let request = self
             .post(&["v1", "apps", app_name, "machines"])
             .json(request);
-        decode(self.send(request).await?).await
+        self.decode(self.send(request).await?).await
     }
 
     /// Appends percent-encoded segments to the base URL, so a trailing slash on
-    /// the base makes no difference and an app name cannot change the path.
+    /// the base makes no difference. `url` drops `.` and `..` segments, so
+    /// callers pass app names through [`check_app_name`] first.
     fn post(&self, segments: &[&str]) -> RequestBuilder {
         let mut url = self.config.base_url.clone();
         url.path_segments_mut()
@@ -285,9 +307,10 @@ impl FlyClient {
     }
 
     async fn send(&self, request: RequestBuilder) -> Result<Response, FlyError> {
-        let response = request.send().await.map_err(|error| FlyError::Transport {
-            source: error.without_url(),
-        })?;
+        let response = request
+            .send()
+            .await
+            .map_err(|error| self.transport_error(&error))?;
         let status = response.status();
         if status.is_success() {
             return Ok(response);
@@ -302,7 +325,27 @@ impl FlyClient {
         })
     }
 
-    /// Removes the token from a server's message, in case it echoes the header.
+    async fn decode<T: DeserializeOwned>(&self, response: Response) -> Result<T, FlyError> {
+        response.json().await.map_err(|error| {
+            if error.is_decode() {
+                FlyError::Decode {
+                    message: self.redact(causes(&error)),
+                }
+            } else {
+                self.transport_error(&error)
+            }
+        })
+    }
+
+    fn transport_error(&self, error: &reqwest::Error) -> FlyError {
+        let base_url = self.config.base_url();
+        FlyError::Transport {
+            message: self.redact(format!("{base_url}: {}", causes(error))),
+        }
+    }
+
+    /// Removes the token from text that came from elsewhere, such as a server
+    /// echoing the header.
     fn redact(&self, message: String) -> String {
         match &self.config.api_token {
             Some(token) => message.replace(token.as_str(), REDACTED),
@@ -319,13 +362,23 @@ impl fmt::Debug for FlyClient {
     }
 }
 
-async fn decode<T: DeserializeOwned>(response: Response) -> Result<T, FlyError> {
-    response.json().await.map_err(|error| {
-        let source = error.without_url();
-        if source.is_decode() {
-            FlyError::Decode { source }
-        } else {
-            FlyError::Transport { source }
-        }
-    })
+fn check_app_name(app_name: &str) -> Result<(), FlyError> {
+    if matches!(app_name, "" | "." | "..") {
+        return Err(FlyError::InvalidAppName);
+    }
+    Ok(())
+}
+
+/// The error and everything that caused it, on one line and without the URL.
+fn causes(error: &reqwest::Error) -> String {
+    let mut text = match error.url() {
+        Some(url) => error.to_string().replace(&format!(" for url ({url})"), ""),
+        None => error.to_string(),
+    };
+    let mut source = std::error::Error::source(error);
+    while let Some(cause) = source {
+        text = format!("{text}: {cause}");
+        source = cause.source();
+    }
+    text
 }
