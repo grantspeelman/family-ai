@@ -1,5 +1,7 @@
 //! The registry app: a GraphQL API served over HTTP.
 
+pub mod accounts;
+
 use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
 use async_graphql_axum::GraphQL;
 use axum::{Router, routing::get, routing::post_service};
