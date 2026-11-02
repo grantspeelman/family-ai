@@ -13,8 +13,8 @@ async fn main() {
         );
         std::process::exit(1);
     };
-    // Kept for the life of the process.
-    let _db = match family_app::db::open(Path::new(&data_dir)).await {
+    // Kept for the life of the process, by the router's handlers.
+    let db = match family_app::db::open(Path::new(&data_dir)).await {
         Ok(db) => db,
         Err(err) => {
             eprintln!("family-app: {err}");
@@ -34,7 +34,7 @@ async fn main() {
         }
     };
     eprintln!("family-app: listening on {addr}");
-    if let Err(err) = axum::serve(listener, family_app::app())
+    if let Err(err) = axum::serve(listener, family_app::app(db))
         .with_graceful_shutdown(shutdown())
         .await
     {
