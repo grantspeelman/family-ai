@@ -41,17 +41,16 @@ The session that runs this skill is the orchestrator. It runs the loop below, sp
                    ┌──────────────────┐
                    │     approver     │
                    │       opus       │
-                   └─┬───────────────┬┘
-             APPROVE │               │ ESCALATE
-                     ▼               ▼
-              ┌─────────────┐ ┌─────────────┐
-              │ wait for ci │ │ needs-human │ ◄── /factory approve
-              └──┬───────┬──┘ └─────────────┘
-           green │       │ red: resume builder as a new round
-                 ▼       └──► (counts toward max 2 rounds)
-              ┌─────────────┐
-              │  merge PR   │
-              └─────────────┘
+                   └─────────┬────────┘
+                             ▼ APPROVE or ESCALATE
+                   ┌──────────────────┐   red: resume builder as a new round
+                   │   wait for ci    ├──► (counts toward max 2 rounds)
+                   └─┬──────────────┬─┘
+     green + APPROVE │              │ green + ESCALATE, or stuck
+                     ▼              ▼
+               ┌───────────┐ ┌─────────────┐
+               │  merge PR │ │ needs-human │ ◄── /factory approve
+               └───────────┘ └─────────────┘
 ```
 
 ## The board
@@ -95,7 +94,7 @@ All job markdown lives on the issue, not in the repo. Keep these headings exact;
 | Decision | comment `## Decision` | approver |
 | Rework note | comment `## Rework note` | a human, via `/factory rework` |
 
-The first non-blank line after a review heading is `VERDICT: PASS` or `VERDICT: CHANGES`. The first after `## Decision` is `APPROVE` or `ESCALATE`.
+The first non-blank line after a review heading is `VERDICT: PASS` or `VERDICT: CHANGES`. The first after `## Decision` is `APPROVE` or `ESCALATE`. If there are several `## Decision` comments, only the latest counts.
 
 ## Rules
 
@@ -113,7 +112,7 @@ The first non-blank line after a review heading is `VERDICT: PASS` or `VERDICT: 
   The check is a script because skill text must not hold literal positional shell variables: they get substituted with the skill's arguments, which corrupts the command.
 - **WAIT FOR ALL.** A review round is done only when all four reviewer fields for the current round are PASS or CHANGES. Never resume the builder mid-round.
 - **Round limit.** Before starting another round, count the factory's own `## Build · round` comments (the Trusted input filter) after the latest of the factory's own `## Rework note` comments (or since the start, if there is none). At 2 or more the limit is used up: go to needs-human instead.
-- **needs-human.** Set Stage to needs-human and `gh issue edit <n> --add-label needs-human`.
+- **needs-human.** A job reaches needs-human only when CI is green and a human is needed (ESCALATE, or files outside the allowed paths), or when the factory is stuck (round limit used up, including with review CHANGES outstanding, or a CI state it can't fix). Set Stage to needs-human and `gh issue edit <n> --add-label needs-human`, and tell the user why. If a stuck job's decision was ESCALATE, say so, because `/factory approve` merges once CI is green.
 - **Private security notes.** If `security-private.md` exists, tell the user what it says in this session, never post it, then delete it.
 - **If a `gh` call fails, stop and report it**: the command, the error, and the job's Stage. Don't let the board and the issue drift apart silently. The one exception is `gh project link` in setup.
 
@@ -128,13 +127,14 @@ The first non-blank line after a review heading is `VERDICT: PASS` or `VERDICT: 
 
    Post its file as the `## Build · round N` comment, then `git -C <worktree> push -u origin factory/<job-id>`. In round 1, after pushing, open the PR, unless the job's PR (Rules) already exists. Write `.factory-tmp/<job-id>/pr-title.txt` and `pr-body.md`, run `gh pr create --base main --head factory/<job-id> --title "$(cat .factory-tmp/<job-id>/pr-title.txt)" --body-file .factory-tmp/<job-id>/pr-body.md`, then delete both. Keep the body simple and high level: what it does, the acceptance criteria with their status from the build notes, the review depth from the spec, `Closes #<n>`, and a last line `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 5. **Review.** Stage = review. Spawn `security-reviewer`, `ux-reviewer`, `ui-reviewer` and `code-reviewer` together. Post each review as it lands, then WAIT FOR ALL. Any CHANGES: go to step 4. All PASS: go to step 6.
-6. **Approval.** Stage = approval. Run `git -C <worktree> fetch origin main`, then spawn `approver` and post its `## Decision`. ESCALATE: needs-human, keeping the worktree. APPROVE: go to step 7.
-7. **Wait for CI.** Poll until `ci` appears and finishes, with the Monitor tool or a Bash `run_in_background` loop. Never sleep in the foreground, and don't use `--watch`, which spins while no checks are reported:
+6. **Approval.** Stage = approval. Run `git -C <worktree> fetch origin main`, then spawn `approver` and post its `## Decision`. APPROVE or ESCALATE: go to step 7.
+7. **Wait for CI.** Stage stays approval during the wait. Poll until `ci` appears and finishes, with the Monitor tool or a Bash `run_in_background` loop. Never sleep in the foreground, and don't use `--watch`, which spins while no checks are reported:
    `for i in $(seq 60); do gh pr checks <pr> --json name,bucket --jq '.[] | select(.name == "ci") | .bucket' | grep -qxE 'pass|fail|cancel|skipping' && break; sleep 30; done`
-   Then read the gate: `gh pr checks <pr> --json name,bucket --jq '.[] | select(.name == "ci")'`. Still pending or missing after 60 tries: needs-human, and report it.
-   - `pass`: run the allowed-paths check (Rules). If it lists files outside the allowed paths, needs-human and don't merge. Otherwise `gh pr merge <pr> --squash --match-head-commit "$(git -C <worktree> rev-parse HEAD)"`, so only the reviewed commit can merge. Set Stage to merged, then `git worktree remove .factory-tmp/worktrees/<job-id>`, `git branch -D factory/<job-id>` and `git push origin --delete factory/<job-id>` (skip if GitHub already deleted it).
-   - `fail`: get the failing names (`--jq '.[] | select(.bucket == "fail") | .name'`) and go to step 4, giving the builder the PR number and those names.
-   - `cancel` or `skipping`: needs-human. Tell the user they can rerun it from the Actions tab, then run `/factory approve <job-id>`.
+   Then read the gate: `gh pr checks <pr> --json name,bucket --jq '.[] | select(.name == "ci")'`. Still pending or missing after 60 tries: the factory can't fix this, so it is stuck: needs-human, and report it. The bullets below use the decision posted in step 6 of this pass.
+   - `pass` and APPROVE: run the allowed-paths check (Rules). If it lists files outside the allowed paths, needs-human and don't merge. Otherwise `gh pr merge <pr> --squash --match-head-commit "$(git -C <worktree> rev-parse HEAD)"`, so only the reviewed commit can merge. Set Stage to merged, then `git worktree remove .factory-tmp/worktrees/<job-id>`, `git branch -D factory/<job-id>` and `git push origin --delete factory/<job-id>` (skip if GitHub already deleted it).
+   - `pass` and ESCALATE: needs-human, keeping the worktree. Tell the user it is ready for a close read, and what the `## Decision` says to read closely.
+   - `fail`, either decision: get the failing names (`--jq '.[] | select(.bucket == "fail") | .name'`) and go to step 4, giving the builder the PR number and those names. The new round goes through reviews and approval again, so the latest decision applies. If the round limit is used up, the job is stuck: needs-human, and tell the user CI is red and why.
+   - `cancel` or `skipping`: the factory can't fix this, so it is stuck: needs-human. Tell the user they can rerun it from the Actions tab, then run `/factory approve <job-id>`.
 8. **Report** to the user: the issue and PR links, and the final Stage.
 
 ## Commands
