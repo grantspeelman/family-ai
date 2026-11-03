@@ -6,7 +6,7 @@ mod common;
 
 use common::{
     TempDir, assert_healthy, assert_stops_accepting, family_app_bin, json_body, machine_addr,
-    machine_body, raw_http,
+    machine_body, raw_http, shell_kill,
 };
 use serde_json::{Value, json};
 use std::{
@@ -20,6 +20,7 @@ use std::{
 };
 
 const TIMEOUT: Duration = Duration::from_secs(20);
+const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const LISTENING: &str = "fly-mock: listening on ";
 
 /// A running `fly-mock` binary and the first line it wrote to stderr.
@@ -70,11 +71,10 @@ impl Server {
     /// Sends a signal by name (`TERM`, `INT`) with the shell's `kill`.
     fn signal(&self, name: &str) {
         let pid = self.child.id().to_string();
-        let status = Command::new("sh")
-            .args(["-c", r#"kill -s "$1" "$2""#, "sh", name, &pid])
-            .status()
-            .unwrap();
-        assert!(status.success(), "kill -s {name} {pid} failed");
+        assert!(
+            shell_kill(&["-s", name, &pid]),
+            "kill -s {name} {pid} failed"
+        );
     }
 
     fn wait(&mut self) -> ExitStatus {
@@ -90,7 +90,18 @@ impl Server {
 }
 
 impl Drop for Server {
+    /// Stops the mock with SIGTERM first, so a failing test doesn't leave family
+    /// apps running, and falls back to SIGKILL.
     fn drop(&mut self) {
+        let pid = self.child.id().to_string();
+        let _ = shell_kill(&["-s", "TERM", &pid]);
+        let deadline = Instant::now() + STOP_TIMEOUT;
+        while Instant::now() < deadline {
+            if !matches!(self.child.try_wait(), Ok(None)) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }

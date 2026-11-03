@@ -18,7 +18,7 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use axum::{
@@ -39,6 +39,7 @@ const TOKEN: &str = "test-token-abc123";
 const LISTENING: &str = "fly-mock: listening on ";
 /// Long enough for `cargo run` to build the mock on a cold cache.
 const MOCK_START_TIMEOUT: Duration = Duration::from_secs(300);
+const MOCK_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MACHINE_BODY: &str = r#"{"id":"m1","name":"n","state":"created","region":"r",
     "private_ip":"fdaa::1","config":{"image":"i"}}"#;
 
@@ -108,9 +109,15 @@ impl Mock {
 impl Drop for Mock {
     fn drop(&mut self) {
         // `cargo run` replaces itself with the mock, so this signals the mock.
-        let _ = Command::new("kill")
-            .arg(self.child.id().to_string())
+        // `kill` through the shell, as a builtin: slim images have no program.
+        let _ = Command::new("sh")
+            .args(["-c", r#"kill "$1""#, "sh", &self.child.id().to_string()])
             .status();
+        let deadline = Instant::now() + MOCK_STOP_TIMEOUT;
+        while matches!(self.child.try_wait(), Ok(None)) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = self.child.kill();
         let _ = self.child.wait();
         let _ = std::fs::remove_dir_all(&self.data_dir);
     }

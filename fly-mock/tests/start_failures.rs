@@ -8,12 +8,11 @@ mod common;
 use std::{
     os::unix::fs::PermissionsExt,
     path::Path,
-    process::Command,
     time::{Duration, Instant},
 };
 
 use axum::http::StatusCode;
-use common::{TempDir, app_with_volume, machine_body, post, settings};
+use common::{TempDir, app_with_volume, machine_body, post, settings, shell_kill};
 use fly_mock::app_with;
 use serde_json::json;
 
@@ -49,12 +48,8 @@ async fn time_limit_stops_the_process_and_returns_500() {
     assert!(start.elapsed() >= Duration::from_millis(1500));
     assert!(start.elapsed() < Duration::from_secs(8));
     let pid = std::fs::read_to_string(pid_file).expect("the script ran");
-    let alive = Command::new("kill")
-        .args(["-0", pid.trim()])
-        .stderr(std::process::Stdio::null())
-        .status()
-        .unwrap();
-    assert!(!alive.success(), "process {} is still running", pid.trim());
+    let alive = shell_kill(&["-0", pid.trim()]);
+    assert!(!alive, "process {} is still running", pid.trim());
 }
 
 #[tokio::test]

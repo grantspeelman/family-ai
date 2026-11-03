@@ -6,6 +6,7 @@ use std::{
     io::{Read, Write},
     net::{IpAddr, TcpStream},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
     sync::atomic::{AtomicU32, Ordering},
     time::{Duration, Instant},
 };
@@ -78,6 +79,18 @@ pub fn settings(binary: impl Into<PathBuf>, data_root: &Path) -> Settings {
         machine_port: MACHINE_PORT,
         start_timeout: Duration::from_secs(10),
     }
+}
+
+/// Runs the shell's `kill` with these arguments. It is a shell builtin, so this
+/// works on hosts with no `kill` program, such as slim container images.
+pub fn shell_kill(args: &[&str]) -> bool {
+    Command::new("sh")
+        .args(["-c", r#"kill "$@""#, "sh"])
+        .args(args)
+        .stderr(Stdio::null())
+        .status()
+        .unwrap()
+        .success()
 }
 
 /// A POST straight into the router, with no contract checks.
