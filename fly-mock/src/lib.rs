@@ -2,11 +2,15 @@
 //! never need a real Fly token.
 //!
 //! Paths and JSON follow Fly's Machines API (`https://api.machines.dev`), so
-//! moving to real Fly changes only the base URL. State lives in memory.
+//! moving to real Fly changes only the base URL. State lives in memory, and
+//! each Machine is a real family app running as a child process.
+
+mod boot;
+
+pub use boot::Settings;
 
 use std::{
     collections::{HashMap, HashSet},
-    net::Ipv6Addr,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -24,27 +28,53 @@ use serde_json::{Value, json};
 /// The region used when a Machine request names none.
 const DEFAULT_REGION: &str = "mock";
 
-/// Builds the HTTP app with its own empty in-memory store.
+/// Builds the HTTP app with its own empty in-memory store, and the settings
+/// from the environment. See [`Settings::from_env`].
+///
+/// # Panics
+///
+/// If `FLY_MOCK_MACHINE_PORT` is set but is not a valid port.
 pub fn app() -> Router {
+    match Settings::from_env() {
+        Ok(settings) => app_with(settings),
+        Err(message) => panic!("{message}"),
+    }
+}
+
+/// Builds the HTTP app with its own empty in-memory store and these settings.
+/// Dropping the router and every clone of it stops the Machines' processes.
+pub fn app_with(settings: Settings) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/v1/apps", post(create_app))
         .route("/v1/apps/{app_name}/volumes", post(create_volume))
         .route("/v1/apps/{app_name}/machines", post(create_machine))
-        .with_state(Store::default())
+        .with_state(Arc::new(Mutex::new(Inner::new(settings))))
 }
 
 type Store = Arc<Mutex<Inner>>;
 
-#[derive(Default)]
 struct Inner {
     /// Volume ids per app name.
     apps: HashMap<String, HashSet<String>>,
     /// Counts every volume and Machine created, so ids and addresses are unique.
     next: u64,
+    /// Hands out what each new Machine's process needs.
+    booter: boot::Booter,
+    /// The Machines' processes. Dropping one kills its process.
+    processes: Vec<boot::Process>,
 }
 
 impl Inner {
+    fn new(settings: Settings) -> Self {
+        Self {
+            apps: HashMap::new(),
+            next: 0,
+            booter: boot::Booter::new(settings),
+            processes: Vec::new(),
+        }
+    }
+
     fn next(&mut self) -> u64 {
         self.next += 1;
         self.next
@@ -182,23 +212,41 @@ async fn create_machine(
     Path(app_name): Path<String>,
     Json(req): Json<CreateMachine>,
 ) -> Response {
-    let mut inner = lock(&store);
-    let Some(volumes) = inner.apps.get(&app_name) else {
-        return app_not_found(&app_name);
+    // The lock is released before the wait for the process to get healthy.
+    let (n, plan) = {
+        let mut inner = lock(&store);
+        let Some(volumes) = inner.apps.get(&app_name) else {
+            return app_not_found(&app_name);
+        };
+        if let Some(volume) = req.config.volumes.iter().find(|v| !volumes.contains(*v)) {
+            return error(StatusCode::NOT_FOUND, format!("volume not found: {volume}"));
+        }
+        // The family app takes one data directory, so the first mount is its volume.
+        let plan = match req.config.volumes.first() {
+            Some(volume) => inner.booter.plan(volume),
+            None => Err(
+                "cannot start a Machine with no mounts: the family app needs a volume".to_string(),
+            ),
+        };
+        let plan = match plan {
+            Ok(plan) => plan,
+            Err(message) => return error(StatusCode::INTERNAL_SERVER_ERROR, message),
+        };
+        (inner.next(), plan)
     };
-    if let Some(volume) = req.config.volumes.iter().find(|v| !volumes.contains(*v)) {
-        return error(StatusCode::NOT_FOUND, format!("volume not found: {volume}"));
-    }
-    let n = inner.next();
+    let private_ip = plan.ip().to_string();
+    let process = match boot::start(plan).await {
+        Ok(process) => process,
+        Err(message) => return error(StatusCode::INTERNAL_SERVER_ERROR, message),
+    };
+    lock(&store).processes.push(process);
     let id = format!("{n:014x}");
-    // Fly gives Machines an address on its private IPv6 network (fdaa::/16).
-    let private_ip = Ipv6Addr::from((0xfdaa_u128 << 112) | u128::from(n));
     Json(Machine {
         name: req.name.unwrap_or_else(|| format!("machine-{id}")),
         id,
-        state: "created",
+        state: "started",
         region: req.region.unwrap_or_else(|| DEFAULT_REGION.to_string()),
-        private_ip: private_ip.to_string(),
+        private_ip,
         config: req.config.raw,
     })
     .into_response()
