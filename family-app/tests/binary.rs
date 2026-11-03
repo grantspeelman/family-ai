@@ -5,7 +5,6 @@
 mod common;
 
 use std::{
-    future::Future,
     io::{ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
@@ -56,24 +55,24 @@ fn start(data_dir: &Path, addr: &str) -> (Running, String) {
     let mut log = Vec::new();
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            panic!(
+                "timed out after {START_TIMEOUT:?} waiting for the app to listen; stderr: {}",
+                String::from_utf8_lossy(&log)
+            );
+        }
         match chunks.recv_timeout(remaining) {
-            // An app that never stops logging must still hit the deadline.
-            Ok(chunk) if !remaining.is_zero() => {
+            Ok(chunk) => {
                 log.extend_from_slice(&chunk);
                 let text = String::from_utf8_lossy(&log);
-                let listening = text
-                    .split_inclusive('\n')
-                    .any(|line| line.ends_with('\n') && line.contains("listening on"));
-                if listening {
+                if text.contains("listening on") {
                     return (running, text.into_owned());
                 }
             }
+            // Go round again: the check above decides whether time is up.
+            Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => panic!(
                 "the app exited before listening; stderr: {}",
-                String::from_utf8_lossy(&log)
-            ),
-            _ => panic!(
-                "timed out after {START_TIMEOUT:?} waiting for the app to listen; stderr: {}",
                 String::from_utf8_lossy(&log)
             ),
         }
@@ -143,16 +142,12 @@ fn request(addr: &str, raw: &str) -> String {
 
 /// Runs `check` against the database file, opened read-only so the check cannot
 /// create or migrate anything itself.
-fn with_read_only_db<F, Fut>(path: &Path, check: F)
-where
-    F: FnOnce(SqlitePool) -> Fut,
-    Fut: Future<Output = ()>,
-{
+fn with_read_only_db(path: &Path, check: impl AsyncFnOnce(&SqlitePool)) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         let options = SqliteConnectOptions::new().filename(path).read_only(true);
         let pool = SqlitePool::connect_with(options).await.unwrap();
-        check(pool.clone()).await;
+        check(&pool).await;
         pool.close().await;
     });
 }
@@ -209,17 +204,17 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
 
     let db_path = dir.path().join("family.db");
     assert!(db_path.is_file());
-    with_read_only_db(&db_path, |pool| async move {
+    with_read_only_db(&db_path, async |pool| {
         let count: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'",
         )
-        .fetch_one(&pool)
+        .fetch_one(pool)
         .await
         .unwrap();
         assert_eq!(count, 1);
         let success: bool =
             sqlx::query_scalar("SELECT success FROM _sqlx_migrations WHERE version = 1")
-                .fetch_one(&pool)
+                .fetch_one(pool)
                 .await
                 .unwrap();
         assert!(success);
@@ -257,11 +252,10 @@ fn written_note_reads_back_over_the_socket_and_is_in_family_db() {
     assert_eq!(json_body(&read), note);
 
     // The row is in the data directory's file, not some other database.
-    let id = note["id"].as_i64().unwrap();
-    with_read_only_db(&dir.path().join("family.db"), |pool| async move {
+    with_read_only_db(&dir.path().join("family.db"), async |pool| {
         let body: String = sqlx::query_scalar("SELECT body FROM notes WHERE id = ?")
-            .bind(id)
-            .fetch_one(&pool)
+            .bind(note["id"].as_i64().unwrap())
+            .fetch_one(pool)
             .await
             .unwrap();
         assert_eq!(body, "over the socket");
