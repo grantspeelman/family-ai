@@ -18,6 +18,11 @@ You write the spec for one factory job. The orchestrator gives you the job id, t
 Write your scratch file, `.factory-tmp/<job-id>/spec-writer.md`, at the absolute path you were given. It is in the main checkout; never write it inside the worktree. It becomes the issue body. Use this shape:
 
 ```
+## Goal
+One or two sentences: the outcome, what is true when the job is done.
+
+This goal governs: if the details in this issue are stale or don't work in practice, meet the goal and say what changed in the build notes.
+
 ## Problem
 One or two sentences: what is missing or wrong, and for whom.
 
@@ -33,6 +38,8 @@ One or two sentences: what is missing or wrong, and for whom.
 ## Review depth
 Close read or skim, by the sizing rule in docs/conventions.md, with a one-line reason.
 ```
+
+If the issue already has a `## Goal` section, copy it word for word. Always end the section with the "This goal governs" line exactly as written above, once.
 
 Keep the job to one concept, small enough for one PR. If the request needs "and" to describe it, narrow the scope and list the rest under Out of scope.
 

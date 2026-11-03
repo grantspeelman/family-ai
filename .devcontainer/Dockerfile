@@ -1,6 +1,6 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
 # Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; gh, gitleaks,
-# lefthook, actionlint, zizmor and bats-core, which the archive lacks or ships too old, are fetched as pinned downloads below.
+# lefthook, actionlint, zizmor, cargo-deny, PMD, bats-core, Flutter, Chrome and chromedriver, which the archive lacks or ships too old, are fetched as pinned downloads below.
 FROM ubuntu:26.04
 
 # pipefail so `curl | tar` and friends fail loudly on a broken download.
@@ -14,6 +14,7 @@ ARG USER_GID=1000
 # From the Ubuntu archive:
 #   • nodejs/npm (Node 22): only needed to install and run Claude Code and Codex.
 #   • python3: for the ad-hoc scripts Claude writes and runs.
+#   • default-jre-headless: the Java runtime for PMD CPD, on amd64 and arm64.
 #   • rustc/cargo/rustfmt/rust-clippy (Rust 1.93): the toolchain for the registry and
 #     family apps. build-essential gives cargo a linker and C compiler, and
 #     sqlite3/libsqlite3-dev/pkg-config cover the family app's SQLite database.
@@ -29,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     cargo \
     curl \
+    default-jre-headless \
     docker-buildx \
     docker-compose-v2 \
     docker.io \
@@ -152,6 +154,43 @@ RUN set -eux; \
     rm -rf /tmp/zizmor.tar.gz /tmp/zizmor-src; \
     zizmor --version
 
+# cargo-deny: workspace dependency policy, used by CI and manifest-change hooks.
+# Checksums: https://github.com/EmbarkStudios/cargo-deny/releases/tag/0.20.2
+ARG CARGO_DENY_VERSION=0.20.2
+ENV CARGO_DENY_SHA256_AMD64=9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+ENV CARGO_DENY_SHA256_ARM64=995c82be0defc7a025cae49a2aa2644ce8245c9a3318fc4103907c6a285e8c7d
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) TOOL_ARCH=x86_64; SHA256="${CARGO_DENY_SHA256_AMD64}" ;; \
+      arm64) TOOL_ARCH=aarch64; SHA256="${CARGO_DENY_SHA256_ARM64}" ;; \
+      *) echo "Unsupported arch: $(dpkg --print-architecture)"; exit 1 ;; \
+    esac; \
+    TOOL_DIR="cargo-deny-${CARGO_DENY_VERSION}-${TOOL_ARCH}-unknown-linux-musl"; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/${TOOL_DIR}.tar.gz" \
+      -o /tmp/cargo-deny.tar.gz; \
+    echo "${SHA256}  /tmp/cargo-deny.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/cargo-deny.tar.gz -C /tmp "${TOOL_DIR}/cargo-deny"; \
+    install -m755 "/tmp/${TOOL_DIR}/cargo-deny" /usr/local/bin/cargo-deny; \
+    rm -rf /tmp/cargo-deny.tar.gz "/tmp/${TOOL_DIR}"; \
+    cargo-deny --version
+
+# PMD CPD: Rust duplication checks, also installed independently in CI. The ZIP
+# contains Java bytecode and the launcher, so amd64 and arm64 use the same pin;
+# default-jre-headless supplies the architecture's runtime from the archive.
+# Published asset digest: https://github.com/pmd/pmd/releases/tag/pmd_releases%2F7.28.0
+ARG PMD_VERSION=7.28.0
+ENV PMD_SHA256=f974ba571f7bc01c73fffe11bade25fbc1f438698f9e9c00e416e8d65e9fbac2
+RUN set -eux; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip" \
+      -o /tmp/pmd.zip; \
+    echo "${PMD_SHA256}  /tmp/pmd.zip" | sha256sum -c -; \
+    unzip -q /tmp/pmd.zip -d /opt; \
+    ln -s "/opt/pmd-bin-${PMD_VERSION}/bin/pmd" /usr/local/bin/pmd; \
+    rm /tmp/pmd.zip; \
+    pmd --version
+
 # bats-core: test runner for bash scripts. Released as a source tarball only (no
 # release assets), so this is GitHub's archive of the v${BATS_VERSION} tag. It is
 # arch-independent, needs only bash, and install.sh puts it under /usr/local.
@@ -226,6 +265,75 @@ ENV CODEX_HOME=/home/vscode/.codex
 RUN mkdir -p /workspace "${CLAUDE_CONFIG_DIR}" "${CODEX_HOME}" && \
     chown vscode:vscode /workspace "${CLAUDE_CONFIG_DIR}" "${CODEX_HOME}"
 WORKDIR /workspace
+
+# Flutter, Chrome and chromedriver: build and test the app in app/. They come after
+# the vscode user because Flutter writes to its own SDK directory, so vscode owns it.
+# amd64 only: Flutter publishes no Linux arm64 archive, so on arm64 the image builds
+# without them. Flutter's checksum comes from its published releases_linux.json.
+# Chrome for Testing publishes no checksums, so its two pins are the SHA-256 of the
+# downloads, cross-checked against the MD5 the storage bucket reports. Chrome and
+# chromedriver come from the same release, so they always match; bump them together.
+ARG FLUTTER_VERSION=3.47.9
+ENV FLUTTER_SHA256_AMD64=25ed8c3c29d51a7353f2a944310b478af8214920639524b19c50a19e6c044c5a
+ARG CHROME_VERSION=156.0.8078.80
+ENV CHROME_SHA256_AMD64=b711c720f774be355197f32edf37e0651418ba036d92446ee2da19ac017540a7
+ENV CHROMEDRIVER_SHA256_AMD64=cae58bbd262ba5c8a0ce2540f44254b6e789efc4fe9b18bbb4a00487a9f5859e
+ENV CHROME_EXECUTABLE=/opt/chrome-linux64/chrome
+ENV FLUTTER_SUPPRESS_ANALYTICS=true
+ENV PATH="/opt/flutter/bin:${PATH}"
+RUN set -eux; \
+    ARCH=$(dpkg --print-architecture); \
+    if [ "${ARCH}" != amd64 ]; then \
+      echo "Skipping Flutter and Chrome: no Linux ${ARCH} Flutter archive"; \
+      exit 0; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      fonts-liberation \
+      libasound2t64 \
+      libatk-bridge2.0-0t64 \
+      libatk1.0-0t64 \
+      libatspi2.0-0t64 \
+      libcairo2 \
+      libcups2t64 \
+      libdbus-1-3 \
+      libgbm1 \
+      libglib2.0-0t64 \
+      libnspr4 \
+      libnss3 \
+      libpango-1.0-0 \
+      libx11-6 \
+      libxcb1 \
+      libxcomposite1 \
+      libxdamage1 \
+      libxext6 \
+      libxfixes3 \
+      libxkbcommon0 \
+      libxrandr2 \
+      xz-utils \
+      zip; \
+    rm -rf /var/lib/apt/lists/*; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+      -o /tmp/flutter.tar.xz; \
+    echo "${FLUTTER_SHA256_AMD64}  /tmp/flutter.tar.xz" | sha256sum -c -; \
+    tar -xJf /tmp/flutter.tar.xz -C /opt; \
+    rm /tmp/flutter.tar.xz; \
+    chown -R vscode:vscode /opt/flutter; \
+    CFT_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64"; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors "${CFT_URL}/chrome-linux64.zip" -o /tmp/chrome.zip; \
+    echo "${CHROME_SHA256_AMD64}  /tmp/chrome.zip" | sha256sum -c -; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors "${CFT_URL}/chromedriver-linux64.zip" -o /tmp/chromedriver.zip; \
+    echo "${CHROMEDRIVER_SHA256_AMD64}  /tmp/chromedriver.zip" | sha256sum -c -; \
+    unzip -q /tmp/chrome.zip -d /opt; \
+    unzip -q /tmp/chromedriver.zip -d /tmp/chromedriver-src; \
+    install -m755 /tmp/chromedriver-src/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver; \
+    ln -s "${CHROME_EXECUTABLE}" /usr/local/bin/google-chrome; \
+    rm -rf /tmp/chrome.zip /tmp/chromedriver.zip /tmp/chromedriver-src; \
+    gosu vscode flutter precache --web --no-android --no-ios --no-linux --no-macos --no-windows --no-fuchsia --no-universal; \
+    gosu vscode flutter --version; \
+    google-chrome --version; \
+    chromedriver --version
 
 COPY .devcontainer/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

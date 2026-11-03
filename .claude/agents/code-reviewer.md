@@ -17,7 +17,7 @@ You give the code review for one round of a factory job. The orchestrator gives 
 ## Check
 
 - Correctness: the change does what the spec says, including edge cases and errors.
-- Tests: each acceptance criterion has a test, and the tests would fail without the change.
+- Tests: each acceptance criterion has a test, and the tests would fail without the change. Rust tests follow `docs/conventions.md`, "Testing Rust code".
 - Readability: clear names, no needless duplication or complexity, no dead code.
 - Scope: one concept, nothing the spec puts out of scope.
 - Conventions: the change follows `AGENTS.md`, `docs/conventions.md` and the READMEs of the code it touches.

@@ -71,6 +71,26 @@ jobs:
             -v "$PWD:/repo" -w /repo "$IMAGE" \
             "${bats_files[@]}"
 
+      # cargo fmt and clippy on the whole Cargo workspace, the same commands as the
+      # pre-commit hook's 2-lint step, in the image just built: the dev container's
+      # Rust 1.93 with clippy and rustfmt, so no third-party action sets up Rust.
+      # No -p flags or paths, so a crate added to the workspace's `members` is
+      # covered with no change here. Run as the checkout's owner so target/ is
+      # writable and owned by the runner.
+      - name: cargo fmt
+        run: |
+          docker run --rm --entrypoint cargo --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            fmt --all --check
+
+      - name: cargo clippy
+        run: |
+          docker run --rm --entrypoint cargo --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            clippy --workspace --all-targets --locked -- -D warnings
+
       # Backstop for commits made outside the container, where the lefthook
       # pre-commit hook does not run.
       - name: Secret scan (full history)
@@ -137,7 +157,34 @@ jobs:
       - name: zizmor
         run: zizmor --offline --persona=pedantic .github/workflows/
 
-  # The registry app: its tests, then the image built from registry/Dockerfile,
+  # All workspace dependencies: licenses, RustSec advisories, bans and sources.
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CARGO_DENY_VERSION: 0.20.2
+      CARGO_DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-deny
+        run: |
+          tool_dir="cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl"
+          mkdir -p "$RUNNER_TEMP/cargo-deny"
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/cargo-deny.tar.gz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/${tool_dir}.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $RUNNER_TEMP/cargo-deny.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/cargo-deny.tar.gz" -C "$RUNNER_TEMP/cargo-deny" --strip-components=1 "$tool_dir/cargo-deny"
+          echo "$RUNNER_TEMP/cargo-deny" >> "$GITHUB_PATH"
+
+      - name: Check workspace dependencies
+        run: cargo deny --locked check
+
+  # The tests of the whole Cargo workspace (every crate in `members`, such as the
+  # registry and fly-mock), then the registry image built from registry/Dockerfile,
   # started and queried over HTTP. cargo runs in the Dockerfile's `toolchain` stage,
   # the Rust image the release build starts from, so the Rust tag is set in one place
   # and no third-party action sets up Rust.
@@ -156,7 +203,9 @@ jobs:
       - name: Build toolchain image
         run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
 
-      # Run as the checkout's owner so target/ is writable and owned by the runner.
+      # `cargo test` at the workspace root with no -p flags, so a crate added to
+      # `members` is tested with no change here. Run as the checkout's owner so
+      # target/ is writable and owned by the runner.
       - name: Cargo tests
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
@@ -201,6 +250,211 @@ jobs:
           echo "$response"
           jq -e --arg v "$expected" '.data.apiVersion == $v' <<<"$response"
 
+  # Line coverage for the whole Cargo workspace, gated on a floor. cargo runs in
+  # the registry Dockerfile's `toolchain` stage, like the `registry` job, so the
+  # Rust tag is set in one place and no third-party action sets up Rust. rustup
+  # adds llvm-tools-preview for that toolchain's own Rust version. `--workspace`
+  # with no -p flags, so a crate added to `members` is measured with no change here.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
+      # The asset digest published on the release page.
+      CARGO_LLVM_COV_VERSION: 0.9.1
+      CARGO_LLVM_COV_SHA256: 3fca950394a3c49457657c158b1619cec8dfd2647ae5b48746734c0ab969a522
+      # Minimum workspace line coverage, in percent. Deliberately generous: it
+      # catches a collapse (tests not running, say), not normal drift. main
+      # measured 19.61% when this was set. Tighten it later with real data.
+      COVERAGE_FLOOR: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-llvm-cov
+        run: |
+          mkdir -p "$RUNNER_TEMP/cargo-llvm-cov"
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/cargo-llvm-cov.tar.gz" \
+            "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${CARGO_LLVM_COV_VERSION}/cargo-llvm-cov-x86_64-unknown-linux-musl.tar.gz"
+          echo "${CARGO_LLVM_COV_SHA256}  $RUNNER_TEMP/cargo-llvm-cov.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/cargo-llvm-cov.tar.gz" -C "$RUNNER_TEMP/cargo-llvm-cov" cargo-llvm-cov
+
+      - name: Build toolchain image
+        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
+
+      # Runs the tests once, saves the totals as JSON for the summary step, then
+      # prints the per-file table and exits non-zero if line coverage is below
+      # COVERAGE_FLOOR. Run as the checkout's owner so target/ is writable and
+      # owned by the runner.
+      - name: Coverage
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -e COVERAGE_FLOOR \
+            -v "$RUNNER_TEMP/cargo-llvm-cov:/opt/cargo-llvm-cov:ro" \
+            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
+            bash -euo pipefail -c '
+              rustup component add llvm-tools-preview
+              cov=/opt/cargo-llvm-cov/cargo-llvm-cov
+              "$cov" llvm-cov --workspace --locked --no-report
+              "$cov" llvm-cov report --json --summary-only --output-path target/llvm-cov-summary.json
+              "$cov" llvm-cov report --summary-only --fail-under-lines "$COVERAGE_FLOOR"
+            '
+
+      # Runs after a pass or a below-floor failure, so the total is always shown.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: |
+          summary=target/llvm-cov-summary.json
+          if [ ! -f "$summary" ]; then
+            echo "no coverage report: the Coverage step failed before measuring" >&2
+            exit 1
+          fi
+          lines=$(jq -r '.data[0].totals.lines | "\(.percent * 100 | round / 100)% (\(.covered) of \(.count) lines)"' "$summary")
+          if jq -e --argjson floor "$COVERAGE_FLOOR" '.data[0].totals.lines.percent >= $floor' "$summary" >/dev/null; then
+            result="at or above the floor"
+          else
+            result="below the floor"
+          fi
+          {
+            echo "## Coverage"
+            echo
+            echo "| Measure | Value |"
+            echo "| --- | --- |"
+            echo "| Workspace line coverage | $lines |"
+            echo "| Floor | ${COVERAGE_FLOOR}% |"
+            echo "| Result | $result |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Function complexity for the whole Cargo workspace: clippy's
+  # `cognitive_complexity` lint, denied, with every other clippy lint allowed, so
+  # this job passes or fails on complexity alone. The threshold is set once, in the
+  # root `clippy.toml`. cargo runs in the registry Dockerfile's `toolchain` stage,
+  # like the `registry` job, so the Rust tag is set in one place and no third-party
+  # action sets up Rust. rustup adds clippy for that toolchain's own Rust version.
+  # `--workspace --all-targets` with no -p flags, so a crate added to `members` is
+  # checked with no change here.
+  complexity:
+    name: complexity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build toolchain image
+        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
+
+      # Run as the checkout's owner so target/ is writable and owned by the runner.
+      - name: Cognitive complexity
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
+            bash -euo pipefail -c '
+              rustup component add clippy
+              cargo clippy --workspace --all-targets --locked -- \
+                -A clippy::all -D clippy::cognitive_complexity
+            '
+
+  # CPD's Rust lexer scans only tracked Rust files, across all current and future
+  # workspace crates. Java and unzip are supplied by the Ubuntu runner image.
+  duplication:
+    name: duplication
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Published asset digest: https://github.com/pmd/pmd/releases/tag/pmd_releases%2F7.28.0
+      PMD_VERSION: 7.28.0
+      PMD_SHA256: f974ba571f7bc01c73fffe11bade25fbc1f438698f9e9c00e416e8d65e9fbac2
+      # Report 100+ tokens to expose smaller clones without blocking work. Fail
+      # at 300+ tokens: a generous initial limit for substantial copy-paste,
+      # rather than ordinary Rust/test boilerplate. Tighten with real data later.
+      DUPLICATION_REPORT_TOKENS: 100
+      DUPLICATION_FAIL_TOKENS: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install PMD CPD
+        run: |
+          curl -fsSL --retry 5 -o "$RUNNER_TEMP/pmd.zip" \
+            "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
+          echo "${PMD_SHA256}  $RUNNER_TEMP/pmd.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/pmd.zip" -d "$RUNNER_TEMP"
+
+      - name: Rust duplication
+        run: |
+          git ls-files -z -- '*.rs' > "$RUNNER_TEMP/rust-files.nul"
+          file_list="$RUNNER_TEMP/rust-files.txt"
+          : > "$file_list"
+          while IFS= read -r -d '' file; do
+            # CPD's file list uses commas/newlines as separators. Refuse these
+            # names so a tracked file cannot silently be omitted or split.
+            case "$file" in
+              *$'\n'*|*$'\r'*|*,*)
+                echo "Rust filename contains a CPD file-list separator" >&2
+                exit 1
+                ;;
+            esac
+            # Absolute paths preserve spaces and names beginning with a dash.
+            printf '%s/%s\n' "$PWD" "$file" >> "$file_list"
+          done < "$RUNNER_TEMP/rust-files.nul"
+          if [ ! -s "$file_list" ]; then
+            echo "no tracked Rust files found" >&2
+            exit 1
+          fi
+          cpd="$RUNNER_TEMP/pmd-bin-$PMD_VERSION/bin/pmd"
+          echo "Reporting duplicates of ${DUPLICATION_REPORT_TOKENS}+ tokens"
+          "$cpd" cpd --language rust --file-list "$file_list" \
+            --minimum-tokens "$DUPLICATION_REPORT_TOKENS" --no-fail-on-violation --fail-on-error
+          echo "Rejecting duplicates of ${DUPLICATION_FAIL_TOKENS}+ tokens"
+          "$cpd" cpd --language rust --file-list "$file_list" \
+            --minimum-tokens "$DUPLICATION_FAIL_TOKENS" --fail-on-violation --fail-on-error
+
+  # The Flutter app, web target only: analyse, widget test, web build and the Chrome
+  # integration test. Everything runs in the dev container image, so Flutter, Chrome
+  # and chromedriver are pinned in one place, the Dockerfile. The image is built with
+  # the runner's UID so that the user running Flutter owns the SDK, which Flutter
+  # writes to. Chrome's sandbox needs privileges a plain container lacks, so the test
+  # turns it off; the only page it loads is this repo's own app.
+  app:
+    name: app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE: family-ai-devcontainer:app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          docker build -f .devcontainer/Dockerfile \
+            --build-arg USER_UID="$(id -u)" --build-arg USER_GID="$(id -g)" \
+            -t "$IMAGE" .
+
+      - name: Flutter checks
+        run: |
+          docker run --rm --entrypoint bash --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$PWD:/repo" -w /repo/app "$IMAGE" \
+            -euo pipefail -c '
+              flutter --version
+              flutter pub get --enforce-lockfile
+              flutter analyze
+              flutter test
+              flutter build web
+              chromedriver --port=4444 &
+              flutter drive --driver=test_driver/integration_test.dart \
+                --target=integration_test/smoke_test.dart -d web-server \
+                --browser-name=chrome --web-browser-flag=--no-sandbox
+            '
+
   # The single required status check. Branch protection requires this job's name
   # (`ci`) and nothing else. It reads the result of every job in `needs:` below, so
   # a job is gated once it is in that list. `if: always()` makes this job run even
@@ -212,7 +466,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry]
+    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication, complexity, app]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

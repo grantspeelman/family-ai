@@ -1,0 +1,22 @@
+[package]
+name = "family-app"
+version = "0.1.0"
+description = "The family app: the service that runs on each family's Machine"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# SQLite with a bundled libsqlite3, so no system SQLite is needed. The
+# workspace keeps to this one SQLite stack: two crates linking sqlite3 cannot
+# coexist in one Cargo workspace.
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio", "migrate", "macros"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", default-features = false, features = ["util"] }
