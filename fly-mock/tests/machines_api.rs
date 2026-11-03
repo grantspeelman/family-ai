@@ -3,7 +3,9 @@
 //! sent and every response received is checked against Fly's Machines OpenAPI
 //! spec, vendored in `tests/fixtures/openapi.json`.
 
-use std::{net::IpAddr, sync::LazyLock};
+mod common;
+
+use std::sync::LazyLock;
 
 use axum::{
     Router,
@@ -81,7 +83,10 @@ async fn post(app: &Router, template: &str, app_name: &str, body: Value) -> (Sta
             &json,
         );
     } else {
-        assert!(status.is_client_error(), "undocumented status {status}");
+        assert!(
+            status.is_client_error() || status == StatusCode::INTERNAL_SERVER_ERROR,
+            "undocumented status {status}"
+        );
         assert_valid("/components/schemas/ErrorResponse", &json);
     }
     (status, json)
@@ -148,9 +153,16 @@ async fn create_volume_returns_volume() {
     assert_eq!(volume["state"], "created");
 }
 
+/// A mock that boots the real family app, and the directory it keeps volumes in.
+fn booting_app() -> (Router, common::TempDir) {
+    let root = common::TempDir::new();
+    let settings = common::settings(common::family_app_bin(), root.path());
+    (fly_mock::app_with(settings), root)
+}
+
 #[tokio::test]
 async fn create_machine_returns_machine() {
-    let app = fly_mock::app();
+    let (app, _root) = booting_app();
     create_app(&app, "fam-1").await;
     let (_, volume) = create_volume(&app, "fam-1", "data").await;
     let config = json!({
@@ -171,21 +183,18 @@ async fn create_machine_returns_machine() {
     assert!(id.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')));
     assert_eq!(machine["name"], "web");
     assert_eq!(machine["region"], "jnb");
-    assert_eq!(machine["state"], "created");
-    machine["private_ip"]
-        .as_str()
-        .unwrap()
-        .parse::<IpAddr>()
-        .unwrap();
+    assert_eq!(machine["state"], "started");
+    common::assert_private_loopback(&machine);
     assert_eq!(machine["config"], config);
 }
 
 #[tokio::test]
 async fn machine_without_name_or_region_gets_defaults() {
-    let app = fly_mock::app();
+    let (app, _root) = booting_app();
     create_app(&app, "fam-1").await;
-    let (status, machine) =
-        post(&app, MACHINES, "fam-1", json!({"config": {"image": "img"}})).await;
+    let (_, volume) = create_volume(&app, "fam-1", "data").await;
+    let body = common::machine_body(volume["id"].as_str().unwrap());
+    let (status, machine) = post(&app, MACHINES, "fam-1", body).await;
     assert_eq!(status, StatusCode::OK);
     assert!(!machine["name"].as_str().unwrap().is_empty());
     assert!(!machine["region"].as_str().unwrap().is_empty());
@@ -193,9 +202,10 @@ async fn machine_without_name_or_region_gets_defaults() {
 
 #[tokio::test]
 async fn machines_and_volumes_get_unique_ids_and_addresses() {
-    let app = fly_mock::app();
+    let (app, _root) = booting_app();
     create_app(&app, "fam-1").await;
-    let body = json!({"config": {"image": "img"}});
+    let (_, volume) = create_volume(&app, "fam-1", "data").await;
+    let body = common::machine_body(volume["id"].as_str().unwrap());
     let (_, a) = post(&app, MACHINES, "fam-1", body.clone()).await;
     let (_, b) = post(&app, MACHINES, "fam-1", body).await;
     assert_ne!(a["id"], b["id"]);
@@ -210,6 +220,18 @@ async fn volume_under_unknown_app_is_not_found() {
     let app = fly_mock::app();
     let (status, body) = create_volume(&app, "ghost", "data").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_fly_error(&body);
+}
+
+#[tokio::test]
+async fn failed_start_matches_the_error_schema() {
+    let root = common::TempDir::new();
+    let app = fly_mock::app_with(common::settings("/bin/false", root.path()));
+    create_app(&app, "fam-1").await;
+    let (_, volume) = create_volume(&app, "fam-1", "data").await;
+    let body = common::machine_body(volume["id"].as_str().unwrap());
+    let (status, body) = post(&app, MACHINES, "fam-1", body).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_fly_error(&body);
 }
 
