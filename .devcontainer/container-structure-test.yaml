@@ -4,9 +4,12 @@
 # fails otherwise.
 #
 # Image design:
-#   • Base ubuntu:26.04. Node 22, Python 3, Java 25, Rust 1.93, SQLite, gosu and Docker come
+#   • Base ubuntu:26.04. Node 22, Python 3, Java 25, SQLite, gosu and Docker come
 #     from the Ubuntu archive, so their tests below pin the series, not the patch release;
-#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny, PMD, bats-core, Flutter, Chrome and chromedriver are pinned, checksummed downloads, pinned exactly.
+#     gh, gitleaks, lefthook, actionlint, zizmor, cargo-deny, cargo-llvm-cov, PMD, bats-core, Flutter, Chrome and chromedriver are pinned, checksummed downloads, pinned exactly.
+#   • Rust is installed through rustup, a pinned, checksummed download. RUST_VERSION names
+#     a minor series, like the registry image's floating tag, so its tests pin the series.
+#     The Rust version in these tests is bumped together with RUST_VERSION.
 #   • Remote user `vscode`, UID/GID matched to the host at build time, so the
 #     bind-mounted checkout and the forwarded ssh-agent socket line up.
 #   • ENTRYPOINT /entrypoint.sh starts as root, starts dockerd only when
@@ -27,6 +30,8 @@ metadataTest:
       value: /home/vscode/.codex
     - key: DISABLE_AUTOUPDATER
       value: "1"
+    - key: RUSTUP_HOME
+      value: /usr/local/rustup
 
 fileExistenceTests:
   - name: workspace mount point exists
@@ -83,20 +88,42 @@ commandTests:
     args: ["--version"]
     expectedOutput: ['Python 3\.14\.']
 
-  - name: rustc is 1.93 (Ubuntu 26.04 archive)
+  - name: rustup is 1.29.3 (RUSTUP_VERSION)
+    command: rustup
+    args: ["--version"]
+    expectedOutput: ['^rustup 1\.29\.3 ']
+
+  - name: rustc is 1.93 (RUST_VERSION, through rustup)
     command: rustc
     args: ["--version"]
     expectedOutput: ['rustc 1\.93\.']
 
-  - name: cargo is 1.93 (Ubuntu 26.04 archive)
+  - name: cargo is 1.93 (RUST_VERSION, through rustup)
     command: cargo
     args: ["--version"]
     expectedOutput: ['cargo 1\.93\.']
 
-  - name: clippy and rustfmt installed (PR 7 tooling, `cargo fmt`)
-    command: bash
-    args: ["-c", "cargo clippy --version && cargo fmt --version"]
-    expectedOutput: ['clippy 0\.1\.93']
+  - name: the rustup default toolchain is 1.93 (RUST_VERSION)
+    command: rustup
+    args: ["default"]
+    expectedOutput: ['^1\.93-[^ ]+ \(default\)']
+
+  - name: rustfmt, clippy and llvm-tools-preview components installed
+    # rustup lists llvm-tools-preview under its current name, llvm-tools.
+    command: rustup
+    args: ["component", "list", "--installed"]
+    expectedOutput: ['(?m)^rustfmt-', '(?m)^clippy-', '(?m)^llvm-tools-']
+
+  - name: Rust is not installed from the Ubuntu archive
+    command: dpkg-query
+    args: ["-W"]
+    excludedOutput: ['(?m)^(rustc|cargo|rustfmt|rust-clippy)(-[0-9.]+)?(:[a-z0-9]+)?[[:space:]]']
+
+  # As vscode, the way the entrypoint drops to it: the toolchain needs no setup.
+  - name: vscode can run the Rust tools
+    command: gosu
+    args: ["vscode", "bash", "-c", "cargo --version && rustc --version && cargo fmt --version && cargo clippy --version && cargo llvm-cov --version"]
+    expectedOutput: ['clippy 0\.1\.93', 'cargo-llvm-cov 0\.9\.1']
 
   - name: C toolchain and pkg-config present (cargo links through cc)
     command: bash
@@ -143,6 +170,11 @@ commandTests:
     command: cargo-deny
     args: ["--version"]
     expectedOutput: ['^cargo-deny 0\.20\.2\r?\n?$']
+
+  - name: cargo-llvm-cov is 0.9.1 (CARGO_LLVM_COV_VERSION)
+    command: cargo
+    args: ["llvm-cov", "--version"]
+    expectedOutput: ['^cargo-llvm-cov 0\.9\.1\r?\n?$']
 
   - name: Java is 25.x (Ubuntu 26.04 archive, PMD CPD runtime)
     command: java

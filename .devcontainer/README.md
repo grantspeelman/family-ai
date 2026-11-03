@@ -121,7 +121,8 @@ family app can all run and talk to each other over localhost.
 
 | Tool | Source |
 |---|---|
-| Rust 1.93 (`rustc`, `cargo`, `rustfmt`, `clippy`) | Ubuntu archive |
+| Rust (`rustc`, `cargo`, `rustfmt`, `clippy`, `llvm-tools-preview`) at `RUST_VERSION` | rustup, from a SHA-256-verified `rustup-init` |
+| `cargo-llvm-cov` 0.9.1 | SHA-256-verified upstream archive |
 | `build-essential`, `pkg-config` | Ubuntu archive |
 | `sqlite3` CLI and `libsqlite3-dev` | Ubuntu archive |
 | Java 25 (`default-jre-headless`) | Ubuntu archive |
@@ -129,8 +130,8 @@ family app can all run and talk to each other over localhost.
 | Flutter 3.47.9 (`flutter`, `dart`) | SHA-256-verified upstream archive, amd64 only |
 | Chrome and chromedriver 156.0.8078.80 (`google-chrome`, `chromedriver`) | SHA-256-verified Chrome for Testing ZIPs, amd64 only |
 
-The archive packages follow the base image; structure tests assert the Rust and
-Java series. PMD uses the same version and checksum as the duplication CI job;
+The archive packages follow the base image; a structure test asserts the Java
+series. PMD uses the same version and checksum as the duplication CI job;
 its Java bytecode runs on both amd64 and arm64. Run `pmd --version` to check the
 installation and `pmd cpd --help` for local duplication checks. Installing it
 does not wire the duplication pre-commit placeholder yet.
@@ -138,12 +139,16 @@ does not wire the duplication pre-commit placeholder yet.
 Flutter publishes no Linux arm64 archive, so on an arm64 host the image builds
 without Flutter, Chrome or chromedriver, and the `app` checks run only in CI.
 
-If you need a newer Rust than the archive offers (a
-crate's MSRV, say), replace `rustc`/`cargo`/`rustfmt`/`rust-clippy` with a pinned,
-SHA-256-checked rustup toolchain in the `Dockerfile` and update the structure test
-in the same commit. The pinned `cargo-deny` checks workspace dependencies. The
-coverage tool planned for PRs 2 and 7 (`cargo-llvm-cov`) is not installed yet;
-add it in its own PR.
+Rust is installed through a pinned, checksummed rustup. The toolchain lives in
+`/usr/local/rustup` and its proxies in `/usr/local/cargo/bin`, both root-owned, so
+adding a component means changing the `Dockerfile` and rebuilding. `vscode` keeps its
+own `~/.cargo` for the registry cache. To bump Rust, change `RUST_VERSION` in the
+`Dockerfile`, the `rust` tag in `registry/Dockerfile`, `rust-version` in the root
+`Cargo.toml` and the Rust tests in the structure test together.
+`rust-version-check.sh` fails CI if the first three differ.
+
+The pinned `cargo-deny` checks workspace dependencies. `cargo-llvm-cov` runs CI's
+coverage check locally; `AGENTS.md`, "Running the checks", has the command.
 
 `postStartCommand.sh` runs `cargo fetch --locked` once a root `Cargo.toml`
 exists. There are no backing services: SQLite is a file on the app's volume.
@@ -175,8 +180,8 @@ this mode.
 ## Changing the image
 
 The image is `ubuntu:26.04`. Most tools come from Ubuntu's archive; `gh` and
-`gitleaks` are too old there, so they're checksummed release binaries. `lefthook`, `actionlint`, `zizmor` and `cargo-deny`
-are checksummed binaries too. PMD CPD is a checksummed ZIP with its Java runtime
+`gitleaks` are too old there, so they're checksummed release binaries. `lefthook`, `actionlint`, `zizmor`, `cargo-deny` and `cargo-llvm-cov`
+are checksummed binaries too. Rust comes from rustup, installed from a checksummed `rustup-init`. PMD CPD is a checksummed ZIP with its Java runtime
 from the Ubuntu archive, Flutter and Chrome for Testing are checksummed archives, and `bats-core` (the bash test runner) is a
 checksummed source tarball installed with its own `install.sh`.
 
@@ -185,9 +190,9 @@ a version test there, so when you bump a pin in the `Dockerfile` (version and
 SHA-256), update its test in the same commit.
 
 `smoke-test.sh` starts a real container the way `start.sh` does and checks it
-end to end: SSH forwarding, Claude settings, the project toolchain, the commit
-hook, nested Docker, and switching back to unprivileged. It needs network access
-(it pulls `hello-world`). It runs in about 30 seconds and cleans up after
+end to end: SSH forwarding, Claude settings, the project toolchain, local
+coverage, the commit hook and its Rust lint step, nested Docker, and switching back to unprivileged. It needs network access
+(it pulls `hello-world`). It takes a few minutes, mostly the local coverage run, and cleans up after
 itself, using a throwaway Claude config volume so your login is never touched.
 
 CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test, the

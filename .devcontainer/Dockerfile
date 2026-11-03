@@ -1,6 +1,7 @@
 # Spec + design notes for this image live in .devcontainer/container-structure-test.yaml.
 # Ubuntu LTS, matching the host OS (Dependabot may propose a newer tag; a human decides). Most tools come from its archive; gh, gitleaks,
-# lefthook, actionlint, zizmor, cargo-deny, PMD, bats-core, Flutter, Chrome and chromedriver, which the archive lacks or ships too old, are fetched as pinned downloads below.
+# lefthook, actionlint, zizmor, cargo-deny, cargo-llvm-cov, PMD, bats-core, Flutter, Chrome and chromedriver, which the archive lacks or ships too old, are fetched as pinned downloads below.
+# Rust is installed through rustup, itself a pinned, checksummed download.
 FROM ubuntu:26.04
 
 # pipefail so `curl | tar` and friends fail loudly on a broken download.
@@ -15,8 +16,7 @@ ARG USER_GID=1000
 #   • nodejs/npm (Node 22): only needed to install and run Claude Code and Codex.
 #   • python3: for the ad-hoc scripts Claude writes and runs.
 #   • default-jre-headless: the Java runtime for PMD CPD, on amd64 and arm64.
-#   • rustc/cargo/rustfmt/rust-clippy (Rust 1.93): the toolchain for the registry and
-#     family apps. build-essential gives cargo a linker and C compiler, and
+#   • build-essential gives cargo a linker and C compiler, and
 #     sqlite3/libsqlite3-dev/pkg-config cover the family app's SQLite database.
 #   • gosu: the entrypoint runs as root (for dockerd) and drops to vscode with it.
 #   • docker.io & co.: for `start.sh --docker` only. dockerd is started by
@@ -28,7 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bubblewrap \
     build-essential \
     ca-certificates \
-    cargo \
     curl \
     default-jre-headless \
     docker-buildx \
@@ -49,15 +48,46 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     ripgrep \
-    rust-clippy \
-    rustc \
-    rustfmt \
     shellcheck \
     socat \
     sqlite3 \
     sudo \
     unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Rust, through a pinned rustup-init, for the registry and family apps. Checksums:
+# the .sha256 next to each rustup-init under
+# https://static.rust-lang.org/rustup/archive/<version>/<target>/.
+# RUST_VERSION is bumped together with the rust image tag in registry/Dockerfile and
+# rust-version in Cargo.toml; .devcontainer/rust-version-check.sh fails CI if they differ.
+# RUSTUP_HOME and the proxies are root-owned and readable by any UID, so they work
+# with no setup for vscode and for CI's --user runs. CARGO_HOME is set only for the
+# install: at run time it stays each user's own ~/.cargo, which holds the registry cache.
+ARG RUSTUP_VERSION=1.29.3
+ENV RUSTUP_SHA256_AMD64=b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55
+ENV RUSTUP_SHA256_ARM64=9f608c142e0e38a78957d0661ba1dfaf0b6fb37184cfaa4b9a0aa57af6184282
+ARG RUST_VERSION=1.93
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH="/usr/local/cargo/bin:${PATH}"
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) TARGET=x86_64-unknown-linux-gnu;  SHA256="${RUSTUP_SHA256_AMD64}" ;; \
+      arm64) TARGET=aarch64-unknown-linux-gnu; SHA256="${RUSTUP_SHA256_ARM64}" ;; \
+      *) echo "Unsupported arch: $(dpkg --print-architecture)"; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/${TARGET}/rustup-init" \
+      -o /tmp/rustup-init; \
+    echo "${SHA256}  /tmp/rustup-init" | sha256sum -c -; \
+    chmod +x /tmp/rustup-init; \
+    CARGO_HOME=/usr/local/cargo /tmp/rustup-init -y --no-modify-path --profile minimal \
+      --default-toolchain "${RUST_VERSION}" \
+      --component rustfmt --component clippy --component llvm-tools-preview; \
+    rm /tmp/rustup-init; \
+    chmod -R a+rX "${RUSTUP_HOME}" /usr/local/cargo; \
+    rustup --version; \
+    rustc --version; \
+    cargo --version
 
 # GitHub CLI: authenticates from GH_TOKEN, which compose reads from ~/.config/family-ai/gh.env.
 ARG GH_VERSION=2.102.0
@@ -174,6 +204,28 @@ RUN set -eux; \
     install -m755 "/tmp/${TOOL_DIR}/cargo-deny" /usr/local/bin/cargo-deny; \
     rm -rf /tmp/cargo-deny.tar.gz "/tmp/${TOOL_DIR}"; \
     cargo-deny --version
+
+# cargo-llvm-cov: run CI's coverage check locally. Bump together with
+# CARGO_LLVM_COV_VERSION in the coverage job of .github/workflows/devcontainer-ci.yml.
+# Checksums: the asset digests on https://github.com/taiki-e/cargo-llvm-cov/releases/tag/v0.9.1
+ARG CARGO_LLVM_COV_VERSION=0.9.1
+ENV CARGO_LLVM_COV_SHA256_AMD64=3fca950394a3c49457657c158b1619cec8dfd2647ae5b48746734c0ab969a522
+ENV CARGO_LLVM_COV_SHA256_ARM64=49c0085628392a8d727c4464d91ec417c613c5015f5197cd16d5c05aa3fb5ad1
+RUN set -eux; \
+    case "$(dpkg --print-architecture)" in \
+      amd64) TOOL_ARCH=x86_64; SHA256="${CARGO_LLVM_COV_SHA256_AMD64}" ;; \
+      arm64) TOOL_ARCH=aarch64; SHA256="${CARGO_LLVM_COV_SHA256_ARM64}" ;; \
+      *) echo "Unsupported arch: $(dpkg --print-architecture)"; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${CARGO_LLVM_COV_VERSION}/cargo-llvm-cov-${TOOL_ARCH}-unknown-linux-musl.tar.gz" \
+      -o /tmp/cargo-llvm-cov.tar.gz; \
+    echo "${SHA256}  /tmp/cargo-llvm-cov.tar.gz" | sha256sum -c -; \
+    mkdir /tmp/cargo-llvm-cov-src; \
+    tar -xzf /tmp/cargo-llvm-cov.tar.gz -C /tmp/cargo-llvm-cov-src cargo-llvm-cov; \
+    install -m755 /tmp/cargo-llvm-cov-src/cargo-llvm-cov /usr/local/bin/cargo-llvm-cov; \
+    rm -rf /tmp/cargo-llvm-cov.tar.gz /tmp/cargo-llvm-cov-src; \
+    cargo llvm-cov --version
 
 # PMD CPD: Rust duplication checks, also installed independently in CI. The ZIP
 # contains Java bytecode and the launcher, so amd64 and arm64 use the same pin;

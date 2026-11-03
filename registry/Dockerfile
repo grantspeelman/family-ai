@@ -2,6 +2,9 @@
 # Cargo.toml and Cargo.lock: docker build -f registry/Dockerfile .
 # CI builds the `toolchain` stage and runs the tests in it, so the tests and the
 # release build use the same Rust.
+# Bump this Rust tag together with RUST_VERSION in .devcontainer/Dockerfile and
+# rust-version in the root Cargo.toml; .devcontainer/rust-version-check.sh fails CI
+# if they differ.
 FROM rust:1.93-slim-trixie AS toolchain
 
 FROM toolchain AS build
