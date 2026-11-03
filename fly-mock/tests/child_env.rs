@@ -78,11 +78,9 @@ fn child_gets_only_the_family_app_variables_and_the_allowlist() {
         "/v1/apps/fam/volumes",
         &json!({"name": "data", "region": "jnb", "size_gb": 1}),
     );
-    post(
-        addr,
-        "/v1/apps/fam/machines",
-        &common::machine_body(volume["id"].as_str().unwrap()),
-    );
+    let body = common::machine_body(volume["id"].as_str().unwrap());
+    let response = raw_http(addr, "POST", "/v1/apps/fam/machines", &body.to_string());
+    assert!(response.starts_with("HTTP/1.1 500 "), "{response}");
 
     let env = std::fs::read_to_string(&recorded).expect("the script ran");
     for name in [
