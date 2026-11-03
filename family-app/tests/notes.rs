@@ -199,10 +199,10 @@ async fn database_errors_are_generic_500s() {
         .await
         .unwrap();
 
-    let write = post(&router, r#"{"body": "hello"}"#).await;
+    let created = post(&router, r#"{"body": "hello"}"#).await;
     let read = get(&router, "/notes/1").await;
 
-    for (status, _, body) in [write, read] {
+    for (status, _, body) in [created, read] {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(body, b"internal server error");
     }
