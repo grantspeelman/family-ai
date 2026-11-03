@@ -1,21 +1,27 @@
-//! Tests of the built `family-app` binary from outside: its startup with
-//! `FAMILY_APP_DATA_DIR`, and `GET /healthz` and the note round trip over a
+//! Tests that run the built `family-app` binary from outside. They cover startup
+//! with `FAMILY_APP_DATA_DIR`, and `GET /healthz` and the note round trip over a
 //! real socket.
 
 mod common;
 
 use std::{
-    io::{BufRead, BufReader, Read, Write},
+    future::Future,
+    io::{ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
     process::{Child, Command, Stdio},
+    sync::mpsc::{self, RecvTimeoutError},
+    thread,
     time::{Duration, Instant},
 };
 
 use common::TempDir;
 use serde_json::Value;
+use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 
 const BIN: &str = env!("CARGO_BIN_EXE_family-app");
+const START_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Kills the child on drop, so a failing assertion does not leak it.
 struct Running(Child);
@@ -33,8 +39,9 @@ fn free_addr() -> String {
 }
 
 /// Starts the binary and waits for its "listening" line, which comes after the
-/// database is open. Panics with the log so far if the app exits first. Returns
-/// the running app, which keeps its stderr pipe open, and the log.
+/// database is open. Panics with the log so far if the app exits first or
+/// `START_TIMEOUT` passes; `Running` then kills the child as the panic unwinds.
+/// Returns the running app and the log.
 fn start(data_dir: &Path, addr: &str) -> (Running, String) {
     let mut running = Running(
         Command::new(BIN)
@@ -44,40 +51,110 @@ fn start(data_dir: &Path, addr: &str) -> (Running, String) {
             .spawn()
             .unwrap(),
     );
-    let mut stderr = BufReader::new(running.0.stderr.as_mut().unwrap());
-    let mut log = String::new();
+    let deadline = Instant::now() + START_TIMEOUT;
+    let chunks = read_in_background(running.0.stderr.take().unwrap());
+    let mut log = Vec::new();
     loop {
-        let mut line = String::new();
-        if stderr.read_line(&mut line).unwrap() == 0 {
-            panic!("the app exited before listening; stderr: {log}");
-        }
-        log.push_str(&line);
-        if line.contains("listening on") {
-            break;
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        match chunks.recv_timeout(remaining) {
+            // An app that never stops logging must still hit the deadline.
+            Ok(chunk) if !remaining.is_zero() => {
+                log.extend_from_slice(&chunk);
+                let text = String::from_utf8_lossy(&log);
+                let listening = text
+                    .split_inclusive('\n')
+                    .any(|line| line.ends_with('\n') && line.contains("listening on"));
+                if listening {
+                    return (running, text.into_owned());
+                }
+            }
+            Err(RecvTimeoutError::Disconnected) => panic!(
+                "the app exited before listening; stderr: {}",
+                String::from_utf8_lossy(&log)
+            ),
+            _ => panic!(
+                "timed out after {START_TIMEOUT:?} waiting for the app to listen; stderr: {}",
+                String::from_utf8_lossy(&log)
+            ),
         }
     }
-    (running, log)
+}
+
+/// Reads `pipe` to its end on a new thread and sends what it reads. The thread
+/// keeps reading after the receiver is gone, so the app's stderr stays open and
+/// never fills up. It ends when the app exits.
+fn read_in_background(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let mut chunk = [0; 4096];
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let _ = sender.send(chunk[..n].to_vec());
+                }
+                Err(err) if err.kind() == ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+    });
+    receiver
 }
 
 /// Sends raw HTTP bytes over a new connection and returns the whole response.
+/// Panics with the partial response if it has not ended within `REQUEST_TIMEOUT`.
 fn request(addr: &str, raw: &str) -> String {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + REQUEST_TIMEOUT;
     let mut stream = loop {
         match TcpStream::connect(addr) {
             Ok(stream) => break stream,
             Err(err) if Instant::now() > deadline => panic!("connect: {err}"),
-            Err(_) => std::thread::sleep(Duration::from_millis(50)),
+            Err(_) => thread::sleep(Duration::from_millis(50)),
         }
     };
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .unwrap();
     stream.write_all(raw.as_bytes()).unwrap();
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .unwrap_or_else(|err| panic!("reading the response: {err}; so far: {response}"));
-    response
+    let mut response = Vec::new();
+    let mut chunk = [0; 4096];
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            panic!(
+                "timed out after {REQUEST_TIMEOUT:?} reading the response; so far: {}",
+                String::from_utf8_lossy(&response)
+            );
+        }
+        stream.set_read_timeout(Some(remaining)).unwrap();
+        match stream.read(&mut chunk) {
+            Ok(0) => return String::from_utf8_lossy(&response).into_owned(),
+            Ok(n) => response.extend_from_slice(&chunk[..n]),
+            // Go round again: the check above decides whether time is up.
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                ) => {}
+            Err(err) => panic!(
+                "reading the response: {err}; so far: {}",
+                String::from_utf8_lossy(&response)
+            ),
+        }
+    }
+}
+
+/// Runs `check` against the database file, opened read-only so the check cannot
+/// create or migrate anything itself.
+fn with_read_only_db<F, Fut>(path: &Path, check: F)
+where
+    F: FnOnce(SqlitePool) -> Fut,
+    Fut: Future<Output = ()>,
+{
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let options = SqliteConnectOptions::new().filename(path).read_only(true);
+        let pool = SqlitePool::connect_with(options).await.unwrap();
+        check(pool.clone()).await;
+        pool.close().await;
+    });
 }
 
 /// The JSON body of a response.
@@ -132,13 +209,7 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
 
     let db_path = dir.path().join("family.db");
     assert!(db_path.is_file());
-    // Read-only, so this check cannot create or migrate anything itself.
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(&db_path)
-            .read_only(true);
-        let pool = sqlx::SqlitePool::connect_with(options).await.unwrap();
+    with_read_only_db(&db_path, |pool| async move {
         let count: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'",
         )
@@ -152,7 +223,6 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
                 .await
                 .unwrap();
         assert!(success);
-        pool.close().await;
     });
 }
 
@@ -187,19 +257,14 @@ fn written_note_reads_back_over_the_socket_and_is_in_family_db() {
     assert_eq!(json_body(&read), note);
 
     // The row is in the data directory's file, not some other database.
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(dir.path().join("family.db"))
-            .read_only(true);
-        let pool = sqlx::SqlitePool::connect_with(options).await.unwrap();
+    let id = note["id"].as_i64().unwrap();
+    with_read_only_db(&dir.path().join("family.db"), |pool| async move {
         let body: String = sqlx::query_scalar("SELECT body FROM notes WHERE id = ?")
-            .bind(note["id"].as_i64().unwrap())
+            .bind(id)
             .fetch_one(&pool)
             .await
             .unwrap();
         assert_eq!(body, "over the socket");
-        pool.close().await;
     });
 }
 
