@@ -37,7 +37,7 @@ Keep pull request titles and descriptions simple and high level. Add a Mermaid d
 | `Cargo.toml`, `Cargo.lock` | The Cargo workspace for the Rust code. Add new crates to `members`, and copy them into the build stage of `registry/Dockerfile`, because cargo loads every member. |
 | `app/` | The Flutter front end for web, iPhone and Android. A placeholder screen so far, built and tested for the web only, in the `app` CI job. `app/README.md` explains it. |
 | `family-app/` | The family app: the Rust service that runs on each family's Machine, with SQLite on its volume. A scaffold with a health check so far. `family-app/README.md` explains it. |
-| `fly-mock/` | The Fly mock: a local stand-in for Fly's Machines API, so local dev and CI need no Fly token. Only a health check so far. `fly-mock/README.md` explains it. |
+| `fly-mock/` | The Fly mock: a local stand-in for Fly's Machines API, so local dev and CI need no Fly token. Machine create starts the real family app as a local process. `fly-mock/README.md` explains it. |
 | `registry/` | The registry app: a Rust GraphQL API with its own `Dockerfile`, `schema.graphql` and tests. `registry/README.md` explains it. |
 | `.devcontainer/` | The dev container. `.devcontainer/README.md` explains it. |
 | `.claude/skills/factory/` | The `/factory` skill: the orchestrator of the software factory. Its `SKILL.md` has the loop and the commands. |
