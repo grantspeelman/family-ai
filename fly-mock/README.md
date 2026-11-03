@@ -14,7 +14,7 @@ It listens on `127.0.0.1:4280`, the port Fly's own Machines API uses on its priv
 
 ## How it is used
 
-fly-mock runs as its own process, started with `cargo run -p fly-mock` and with its address set by `FLY_MOCK_ADDR`. It stands in for Fly's Machines API in end-to-end tests and local dev. The registry reaches it the same way it reaches real Fly: through its Fly API base URL, set to the mock's address. No crate depends on it, and registry tests do not link against it.
+fly-mock runs as its own process, started with `cargo run -p fly-mock` and with its address set by `FLY_MOCK_ADDR`. It stands in for Fly's Machines API in end-to-end tests and local dev. The registry reaches it the same way it reaches real Fly: through its Fly API base URL, set to the mock's address. No crate depends on it, and registry tests do not link against it: `registry/tests/fly_client.rs` runs it as a process.
 
 ## Endpoints
 

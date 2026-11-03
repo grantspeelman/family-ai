@@ -1,16 +1,22 @@
 //! The Fly API client, against the real Fly mock process and small stub servers.
 //!
 //! The mock runs as its own process, as it does in dev and e2e: no crate links
-//! against `fly-mock`, so these tests start it with `cargo run`.
+//! against `fly-mock`, so these tests start it with `cargo run`. It starts a real
+//! family app per Machine, so they build that binary first, and stop the mock
+//! with SIGTERM, because it can't stop its family apps on a SIGKILL.
 
 use std::{
     collections::BTreeMap,
     ffi::OsString,
     io::{BufRead, BufReader},
     net::IpAddr,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex, mpsc},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU32, Ordering},
+        mpsc,
+    },
     thread,
     time::Duration,
 };
@@ -40,15 +46,32 @@ const MACHINE_BODY: &str = r#"{"id":"m1","name":"n","state":"created","region":"
 struct Mock {
     child: Child,
     base_url: String,
+    data_dir: PathBuf,
 }
 
 impl Mock {
     fn start() -> Self {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
         let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let built = Command::new(&cargo)
+            .args(["build", "--quiet", "--locked", "-p", "family-app"])
+            .current_dir(manifest_dir)
+            .status()
+            .expect("cannot run cargo");
+        assert!(built.success(), "cannot build family-app");
+        let data_dir = std::env::temp_dir().join(format!(
+            "registry-fly-mock-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         let mut child = Command::new(cargo)
             .args(["run", "--quiet", "--locked", "-p", "fly-mock"])
-            .current_dir(Path::new(env!("CARGO_MANIFEST_DIR")))
+            .current_dir(manifest_dir)
             .env("FLY_MOCK_ADDR", "127.0.0.1:0")
+            .env("FLY_MOCK_DATA_DIR", &data_dir)
+            // Not 8080, so a server on this host's wildcard address can't block it.
+            .env("FLY_MOCK_MACHINE_PORT", "18082")
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
@@ -73,6 +96,7 @@ impl Mock {
         Self {
             child,
             base_url: format!("http://{addr}"),
+            data_dir,
         }
     }
 
@@ -83,8 +107,12 @@ impl Mock {
 
 impl Drop for Mock {
     fn drop(&mut self) {
-        let _ = self.child.kill();
+        // `cargo run` replaces itself with the mock, so this signals the mock.
+        let _ = Command::new("kill")
+            .arg(self.child.id().to_string())
+            .status();
         let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.data_dir);
     }
 }
 
@@ -197,7 +225,7 @@ async fn creates_an_app_a_volume_and_a_machine_on_the_mock() {
     assert!(machine.id.chars().all(|c| c.is_ascii_hexdigit()));
     assert_eq!(machine.name, "web");
     assert_eq!(machine.region, "jnb");
-    assert_eq!(machine.state, "created");
+    assert_eq!(machine.state, "started");
     machine.private_ip.parse::<IpAddr>().unwrap();
     assert_eq!(machine.config, request.config);
 }
