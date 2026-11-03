@@ -213,7 +213,7 @@ pub(crate) async fn start(plan: Plan) -> Result<Process, String> {
         .spawn()
         .map_err(|err| {
             format!(
-                "cannot start family app binary {}: {err}",
+                "cannot start family app binary {}: {err}; build it with `cargo build -p family-app` or set FLY_MOCK_FAMILY_APP_BIN",
                 plan.binary.display()
             )
         })?;
@@ -221,7 +221,7 @@ pub(crate) async fn start(plan: Plan) -> Result<Process, String> {
     let failure = tokio::select! {
         () = poll_until_healthy(plan.addr.into()) => return Ok(Process { _child: child }),
         status = child.wait() => match status {
-            Ok(status) => format!("family app exited before it was healthy: {status}"),
+            Ok(status) => format!("family app exited before it was healthy: {status}; see the mock's output"),
             Err(err) => format!("cannot wait for the family app: {err}"),
         },
         () = sleep_until(deadline) => format!(

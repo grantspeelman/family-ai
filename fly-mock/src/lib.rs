@@ -57,7 +57,7 @@ type Store = Arc<Mutex<Inner>>;
 struct Inner {
     /// Volume ids per app name.
     apps: HashMap<String, HashSet<String>>,
-    /// Counts every volume and Machine created, so ids and addresses are unique.
+    /// Counts every volume and Machine created, so ids are unique.
     next: u64,
     /// Hands out what each new Machine's process needs.
     booter: boot::Booter,
@@ -222,13 +222,11 @@ async fn create_machine(
             return error(StatusCode::NOT_FOUND, format!("volume not found: {volume}"));
         }
         // The family app takes one data directory, so the first mount is its volume.
-        let plan = match req.config.volumes.first() {
-            Some(volume) => inner.booter.plan(volume),
-            None => Err(
-                "cannot start a Machine with no mounts: the family app needs a volume".to_string(),
-            ),
+        let Some(volume) = req.config.volumes.first() else {
+            let message = "cannot start a Machine with no mounts: the family app needs a volume";
+            return error(StatusCode::INTERNAL_SERVER_ERROR, message.to_string());
         };
-        let plan = match plan {
+        let plan = match inner.booter.plan(volume) {
             Ok(plan) => plan,
             Err(message) => return error(StatusCode::INTERNAL_SERVER_ERROR, message),
         };

@@ -88,7 +88,10 @@ async fn missing_binary_fails_well_within_the_time_limit() {
     let (status, body) = post(&app, MACHINES, machine_body(&volume)).await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_fly_error(&body);
-    assert!(body["error"].as_str().unwrap().contains("cannot start"));
+    let message = body["error"].as_str().unwrap();
+    assert!(message.contains("cannot start"), "{message}");
+    assert!(message.contains("cargo build -p family-app"), "{message}");
+    assert!(message.contains("FLY_MOCK_FAMILY_APP_BIN"), "{message}");
     assert!(start.elapsed() < Duration::from_secs(5));
 }
 
@@ -101,8 +104,30 @@ async fn binary_that_exits_at_once_fails_before_the_time_limit() {
     let (status, body) = post(&app, MACHINES, machine_body(&volume)).await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_fly_error(&body);
-    assert!(body["error"].as_str().unwrap().contains("exited"));
+    let message = body["error"].as_str().unwrap();
+    assert!(message.contains("exited"), "{message}");
+    assert!(message.contains("the mock's output"), "{message}");
     assert!(start.elapsed() < Duration::from_secs(5));
+}
+
+#[tokio::test]
+async fn wildcard_listener_on_the_machine_port_means_no_free_address() {
+    let root = TempDir::new();
+    let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+    let mut settings = settings(family_app_bin(), root.path());
+    settings.machine_port = listener.local_addr().unwrap().port();
+    let app = app_with(settings);
+    let volume = app_with_volume(&app).await;
+    let (status, body) = post(&app, MACHINES, machine_body(&volume)).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_fly_error(&body);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap()
+            .contains("no free loopback address"),
+        "{body}"
+    );
 }
 
 #[tokio::test]
