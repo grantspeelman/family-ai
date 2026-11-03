@@ -34,7 +34,7 @@ Any other path returns `404`.
 
 ## Machines
 
-Create-Machine starts the family app binary as a child process and answers once the app is healthy. `config.image` and `config.env` are ignored: every Machine runs the family app with the mock's own environment, plus `FAMILY_APP_ADDR` and `FAMILY_APP_DATA_DIR`, described below. There are no containers or Firecracker.
+Create-Machine starts the family app binary as a child process and answers once the app is healthy. `config.image` and `config.env` are ignored: every Machine runs the family app with a cleared environment holding only `FAMILY_APP_ADDR` and `FAMILY_APP_DATA_DIR`, described below, plus `LLVM_PROFILE_FILE` and `RUST_BACKTRACE` when set on the mock. There are no containers or Firecracker.
 
 | Variable | Default | What |
 | --- | --- | --- |
