@@ -41,7 +41,9 @@ The response is the stored row, with `Content-Type: application/json`. SQLite as
 | `400` | The JSON is invalid. |
 | `415` | The `Content-Type` header is missing or not JSON. |
 | `422` | `body` is missing or not a string. |
-| `500` | A database error. The body is the plain text `internal server error`. |
+| `500` | A database error. |
+
+The `400`, `415` and `422` bodies are plain text describing the problem, not JSON. The `500` body is the plain text `internal server error`.
 
 No row is written unless the status is `201`.
 
@@ -53,8 +55,10 @@ The response has the same JSON and `Content-Type` as the write.
 | --- | --- |
 | `200` | The note exists. |
 | `400` | `id` is not a 64-bit integer. |
-| `404` | No note has this `id`. The body is empty. |
-| `500` | A database error. The body is the plain text `internal server error`. |
+| `404` | No note has this `id`. |
+| `500` | A database error. |
+
+The `400` body is plain text describing the problem, not JSON. The `404` body is empty. The `500` body is the plain text `internal server error`.
 
 ### Example
 
@@ -66,6 +70,8 @@ curl -i -X POST http://127.0.0.1:8080/notes \
   -d '{"body": "hello"}'
 curl -i http://127.0.0.1:8080/notes/1
 ```
+
+Use the `id` from the `POST` response in place of `/notes/1`.
 
 ## Database
 
@@ -87,4 +93,4 @@ notes(id INTEGER PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAU
 cargo test --locked -p family-app
 ```
 
-`tests/health.rs` and `tests/notes.rs` send requests straight into the router, the latter against a real database. `tests/storage.rs` opens databases in fresh temp directories. `tests/binary.rs` starts the built binary and checks its startup errors and `GET /healthz`. CI runs them as part of the workspace-wide `cargo test --locked` in the `registry` job.
+`tests/health.rs` and `tests/notes.rs` send requests straight into the router, the latter against a real database. `tests/storage.rs` opens databases in fresh temp directories. `tests/binary.rs` starts the built binary and checks its startup errors, `GET /healthz` and a note written and read back over the socket. CI runs them as part of the workspace-wide `cargo test --locked` in the `registry` job.

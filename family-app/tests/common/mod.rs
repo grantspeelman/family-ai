@@ -1,4 +1,7 @@
-//! Helpers shared by the tests that send requests straight into the router.
+//! Helpers shared by the test files. Each file uses only some of them, so
+//! unused ones are not dead code.
+
+#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +19,7 @@ pub struct TempDir(PathBuf);
 impl TempDir {
     pub fn new(name: &str) -> Self {
         let path =
-            std::env::temp_dir().join(format!("family-app-http-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("family-app-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         TempDir(path)
