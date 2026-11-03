@@ -1,4 +1,6 @@
-//! Tests of the `family-app` binary's startup with `FAMILY_APP_DATA_DIR`.
+//! Tests of the built `family-app` binary from outside: its startup with
+//! `FAMILY_APP_DATA_DIR`, and `GET /healthz` and the note round trip over a
+//! real socket.
 
 mod common;
 
@@ -6,7 +8,7 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
-    process::{Child, ChildStderr, Command, Stdio},
+    process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
 
@@ -16,16 +18,12 @@ use serde_json::Value;
 const BIN: &str = env!("CARGO_BIN_EXE_family-app");
 
 /// Kills the child on drop, so a failing assertion does not leak it.
-struct Running {
-    child: Child,
-    // Held open so the app's own stderr writes keep working while it runs.
-    _stderr: BufReader<ChildStderr>,
-}
+struct Running(Child);
 
 impl Drop for Running {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let _ = self.0.kill();
+        let _ = self.0.wait();
     }
 }
 
@@ -35,30 +33,29 @@ fn free_addr() -> String {
 }
 
 /// Starts the binary and waits for its "listening" line, which comes after the
-/// database is open. Returns the running app and its stderr so far.
+/// database is open. Panics with the log so far if the app exits first. Returns
+/// the running app, which keeps its stderr pipe open, and the log.
 fn start(data_dir: &Path, addr: &str) -> (Running, String) {
-    let mut child = Command::new(BIN)
-        .env("FAMILY_APP_DATA_DIR", data_dir)
-        .env("FAMILY_APP_ADDR", addr)
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut stderr = BufReader::new(child.stderr.take().unwrap());
+    let mut running = Running(
+        Command::new(BIN)
+            .env("FAMILY_APP_DATA_DIR", data_dir)
+            .env("FAMILY_APP_ADDR", addr)
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut stderr = BufReader::new(running.0.stderr.as_mut().unwrap());
     let mut log = String::new();
     loop {
         let mut line = String::new();
         if stderr.read_line(&mut line).unwrap() == 0 {
-            break;
+            panic!("the app exited before listening; stderr: {log}");
         }
         log.push_str(&line);
         if line.contains("listening on") {
             break;
         }
     }
-    let running = Running {
-        child,
-        _stderr: stderr,
-    };
     (running, log)
 }
 
@@ -72,9 +69,14 @@ fn request(addr: &str, raw: &str) -> String {
             Err(_) => std::thread::sleep(Duration::from_millis(50)),
         }
     };
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
     stream.write_all(raw.as_bytes()).unwrap();
     let mut response = String::new();
-    stream.read_to_string(&mut response).unwrap();
+    stream
+        .read_to_string(&mut response)
+        .unwrap_or_else(|err| panic!("reading the response: {err}; so far: {response}"));
     response
 }
 
