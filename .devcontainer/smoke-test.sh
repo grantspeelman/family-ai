@@ -67,6 +67,22 @@ in_container '
     || fail "Rust build/test/clippy/fmt failed"
 pass "cargo build, test, clippy and fmt work"
 
+in_container '
+    set -e; export RUSTUP_AUTO_INSTALL=0
+    [ "$(command -v cargo)" = /usr/local/cargo/bin/cargo ]
+    cargo --version; rustc --version; cargo fmt --version; cargo clippy --version; cargo llvm-cov --version
+    cd /workspace; cargo fetch --locked' >/dev/null \
+    || fail "the rustup toolchain does not work as vscode without a download"
+pass "the rustup toolchain and cargo fetch work as vscode"
+
+# The command AGENTS.md documents, without the floor, which the coverage job owns,
+# and with its build output outside the checkout.
+in_container '
+    set -e; cd /workspace
+    CARGO_TARGET_DIR=/tmp/smoke-coverage cargo llvm-cov --workspace --locked --summary-only' \
+    | grep -q '^TOTAL' || fail "local coverage did not report a total"
+pass "cargo llvm-cov reports a workspace total"
+
 [ "$(in_container "sqlite3 :memory: 'select 21*2'")" = 42 ] || fail "sqlite3 did not answer"
 pass "sqlite3 works"
 
@@ -86,6 +102,19 @@ in_container '
     set -e; cd /tmp/t; git rm -qf --cached leak.txt; rm leak.txt
     echo clean > ok.txt; git add ok.txt; git commit -qm clean >/dev/null 2>&1' || fail "clean change was not committed"
 pass "clean change commits normally"
+
+# Only the .rs file is staged, so the Rust lint step runs and cargo-deny does not.
+in_container '
+    set -e; cd /tmp/t; mkdir -p .lefthook src; cp /workspace/.lefthook/placeholder.sh .lefthook/
+    printf "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2024\"\n" > Cargo.toml
+    printf "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n" > src/lib.rs
+    cargo generate-lockfile --offline --quiet
+    git add src/lib.rs
+    out="$(git commit -m rust 2>&1)" || { printf "%s\n" "$out" >&2; exit 1; }
+    printf "%s\n" "$out" | grep -q 2-lint
+    if printf "%s\n" "$out" | grep -q "2-lint (skip)"; then exit 1; fi' \
+    || fail "a commit staging a .rs file did not pass the Rust lint step"
+pass "Rust lint step runs and passes on a staged .rs file"
 
 in_container 'docker run --rm --quiet hello-world' | grep -q 'Hello from Docker!' || fail "nested docker run failed"
 pass "nested docker run works"

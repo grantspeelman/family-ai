@@ -64,6 +64,16 @@ lefthook uses `lefthook.yml` to run gitleaks on staged changes, `cargo fmt --all
 
 Never bypass the hook with `--no-verify`. If it blocks a commit, fix the finding. Every allowlist entry needs a written reason.
 
+### Coverage, locally
+
+The dev container has `cargo-llvm-cov`, so you can run CI's coverage check before pushing:
+
+```sh
+cargo llvm-cov --workspace --locked --fail-under-lines 5
+```
+
+The number must match `COVERAGE_FLOOR` in the `coverage` job of `.github/workflows/devcontainer-ci.yml`. The pre-commit hook does not run it.
+
 ### On the PR
 
 CI runs every test and lint job, including checks the hook does not cover.
