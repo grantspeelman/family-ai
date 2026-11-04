@@ -28,6 +28,10 @@ const TICK: Duration = Duration::from_millis(25);
 /// A status line longer than this is not a healthy family app.
 const MAX_STATUS_LINE: usize = 256;
 
+/// Passed from the mock to the family app when set: the coverage output path,
+/// so child runs count in the `coverage` CI job, and panic backtraces.
+const PASSED_THROUGH_ENV: [&str; 2] = ["LLVM_PROFILE_FILE", "RUST_BACKTRACE"];
+
 /// What the mock needs to start family apps.
 #[derive(Clone, Debug)]
 pub struct Settings {
@@ -206,6 +210,10 @@ pub(crate) async fn start(plan: Plan) -> Result<Process, String> {
     // `kill_on_drop` also covers this future being dropped, as when the client
     // goes away during the wait.
     let mut child = Command::new(&plan.binary)
+        .env_clear()
+        .envs(PASSED_THROUGH_ENV.iter().filter_map(|name| {
+            std::env::var_os(name).map(|value| (name, value))
+        }))
         .env("FAMILY_APP_ADDR", plan.addr.to_string())
         .env("FAMILY_APP_DATA_DIR", &plan.data_dir)
         .stdin(Stdio::null())
