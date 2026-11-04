@@ -11,9 +11,8 @@ container keeps running after you exit.
 
 | Flag        | Effect |
 |-------------|--------|
-| `--rebuild` | Run `git pull --ff-only` on the checked-out branch, then rebuild the image from scratch. The image is built from this checkout, so the pull keeps it current; if the pull fails, nothing is rebuilt. This is also how Claude Code and Codex get upgraded. |
+| `--rebuild` | Run `git pull --ff-only` on the checked-out branch, then rebuild the image from scratch. The image is built from this checkout, so the pull keeps it current; if the pull fails, nothing is rebuilt. This is also how Claude Code gets upgraded. |
 | `--claude`  | Run Claude Code directly instead of a shell. Sets `HERDR_AGENT` so [herdr](https://herdr.dev) sees the agent. |
-| `--codex`   | Same, for Codex. |
 | `--docker`  | Privileged mode with nested Docker. Read [Nested Docker](#nested-docker) first. |
 
 `start.sh --help` prints the usage and the flags.
@@ -22,21 +21,20 @@ Run a specific command by putting it and its arguments after `--`:
 
 ```sh
 .devcontainer/start.sh --rebuild -- claude --resume
-.devcontainer/start.sh -- codex resume
 .devcontainer/start.sh -- bash -lc 'echo "hello from the container"'
 ```
 
 Everything after `--` is passed directly to the container command, preserving
 argument boundaries. With no command, the launcher opens Bash. Commands named
-`claude` or `codex` set `HERDR_AGENT` for [herdr](https://herdr.dev); the
-`--claude` and `--codex` shortcuts still work, but cannot be combined with `--`.
+`claude` set `HERDR_AGENT` for [herdr](https://herdr.dev); the
+`--claude` shortcut still works, but cannot be combined with `--`.
 
 **VS Code:** *Dev Containers: Reopen in Container*. VS Code builds its own
 container from the same `docker-compose.yml`, separate from the one
 `start.sh` builds.
 
-First time only: run `claude` (or `codex`) inside and log in. The logins live in the
-`family-ai-claude-config` and `family-ai-codex-config` volumes, which every container for this repo
+First time only: run `claude` inside and log in. The login lives in the
+`family-ai-claude-config` volume, which every container for this repo
 shares, so it survives rebuilds and covers both entry points.
 
 ## What the container can reach

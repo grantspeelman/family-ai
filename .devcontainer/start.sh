@@ -4,13 +4,12 @@
 #   --rebuild  git pull --ff-only, then rebuild the image from scratch (also how Claude Code gets upgraded)
 #   --docker   privileged mode with nested Docker; see compose.docker.yml first
 #   --claude   run Claude Code directly instead of a shell (tells herdr it's an agent)
-#   --codex    run Codex directly instead of a shell (tells herdr it's an agent)
 #   -- command [args...]  run the given command inside the container
 set -euo pipefail
 
 # The usage line plus the flag lines of the header comment above: one source.
 # The scan stops at the first `set -` line, so later comments never leak in.
-usage_line() { echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude|--codex | -- command [args...]]"; }
+usage_line() { echo "Usage: $(basename "$0") [--rebuild] [--docker] [--claude | -- command [args...]]"; }
 print_help() {
     usage_line
     sed -n '/^set -/q;/^#   -/{s/^# //;p;}' "${BASH_SOURCE[0]}"
@@ -34,15 +33,11 @@ while [ "$#" -gt 0 ]; do
         -h|--help) print_help; exit 0 ;;
         --rebuild) rebuild=true ;;
         --docker) docker_mode=true ;;
-        --claude|--codex)
-            if [ -n "$agent" ] && [ "$agent" != "${arg#--}" ]; then
-                echo "--claude and --codex are mutually exclusive" >&2; exit 64
-            fi
-            agent="${arg#--}" ;;
+        --claude) agent=claude ;;
         --)
             shift
             if [ "$#" -eq 0 ] || [ -n "$agent" ]; then
-                echo "Supply a command after --, without --claude or --codex." >&2
+                echo "Supply a command after --, without --claude." >&2
                 exit 64
             fi
             command=("$@")
@@ -56,7 +51,7 @@ if [ -n "$agent" ]; then
     command=("$agent")
 fi
 case "${command[0]}" in
-    claude|codex) agent="${command[0]}" ;;
+    claude) agent="${command[0]}" ;;
 esac
 
 # One container per checkout: key the compose project to the checkout path, so
