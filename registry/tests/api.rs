@@ -11,7 +11,7 @@ mod common;
 
 async fn send(name: &str, request: Request<Body>) -> (StatusCode, Vec<u8>) {
     let store = common::fresh_store(&format!("api-{name}")).await;
-    let response = registry::app(store).oneshot(request).await.unwrap();
+    let response = registry::app(store, None).oneshot(request).await.unwrap();
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     (status, body.to_vec())
@@ -64,7 +64,7 @@ async fn graphql_rejects_get() {
 async fn schema_file_matches_the_code() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/schema.graphql");
     let store = common::fresh_store("api-schema-file").await;
-    let generated = registry::schema(store).sdl();
+    let generated = registry::schema(store, None).sdl();
     if std::env::var("UPDATE_SCHEMA").as_deref() == Ok("1") {
         std::fs::write(path, &generated).unwrap();
         return;

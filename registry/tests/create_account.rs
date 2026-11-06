@@ -26,7 +26,10 @@ async fn create(store: &AccountStore, email: &str, family_name: &str) -> Value {
                 .to_string(),
         ))
         .unwrap();
-    let response = registry::app(store.clone()).oneshot(request).await.unwrap();
+    let response = registry::app(store.clone(), common::provisioner())
+        .oneshot(request)
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&body).unwrap()
