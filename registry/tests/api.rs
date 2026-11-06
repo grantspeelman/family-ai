@@ -7,8 +7,11 @@ use axum::{
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-async fn send(request: Request<Body>) -> (StatusCode, Vec<u8>) {
-    let response = registry::app().oneshot(request).await.unwrap();
+mod common;
+
+async fn send(name: &str, request: Request<Body>) -> (StatusCode, Vec<u8>) {
+    let store = common::fresh_store(&format!("api-{name}")).await;
+    let response = registry::app(store).oneshot(request).await.unwrap();
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     (status, body.to_vec())
@@ -27,7 +30,7 @@ fn graphql(query: &str) -> Request<Body> {
 
 #[tokio::test]
 async fn api_version_is_the_crate_version() {
-    let (status, body) = send(graphql("{ apiVersion }")).await;
+    let (status, body) = send("api-version", graphql("{ apiVersion }")).await;
     assert_eq!(status, StatusCode::OK);
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["data"]["apiVersion"], env!("CARGO_PKG_VERSION"));
@@ -37,7 +40,7 @@ async fn api_version_is_the_crate_version() {
 #[tokio::test]
 async fn healthz_returns_ok() {
     let request = Request::get("/healthz").body(Body::empty()).unwrap();
-    let (status, body) = send(request).await;
+    let (status, body) = send("healthz", request).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, b"ok");
 }
@@ -45,7 +48,7 @@ async fn healthz_returns_ok() {
 #[tokio::test]
 async fn unknown_path_is_not_found() {
     let request = Request::get("/nope").body(Body::empty()).unwrap();
-    let (status, _) = send(request).await;
+    let (status, _) = send("unknown-path", request).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
@@ -53,14 +56,15 @@ async fn unknown_path_is_not_found() {
 async fn graphql_rejects_get() {
     // No GraphiQL or playground: GET /graphql serves nothing.
     let request = Request::get("/graphql").body(Body::empty()).unwrap();
-    let (status, _) = send(request).await;
+    let (status, _) = send("graphql-get", request).await;
     assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
 }
 
-#[test]
-fn schema_file_matches_the_code() {
+#[tokio::test]
+async fn schema_file_matches_the_code() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/schema.graphql");
-    let generated = registry::schema().sdl();
+    let store = common::fresh_store("api-schema-file").await;
+    let generated = registry::schema(store).sdl();
     if std::env::var("UPDATE_SCHEMA").as_deref() == Ok("1") {
         std::fs::write(path, &generated).unwrap();
         return;

@@ -1,9 +1,24 @@
+use registry::accounts::{AccountStore, db_path_from};
 use tokio::{net::TcpListener, signal};
 
 const DEFAULT_ADDR: &str = "127.0.0.1:8080";
 
 #[tokio::main]
 async fn main() {
+    let db_path = match db_path_from(|name| std::env::var_os(name)) {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("registry: {err}");
+            std::process::exit(1);
+        }
+    };
+    let store = match AccountStore::open(&db_path).await {
+        Ok(store) => store,
+        Err(err) => {
+            eprintln!("registry: cannot open {}: {err}", db_path.display());
+            std::process::exit(1);
+        }
+    };
     let addr = std::env::var("REGISTRY_ADDR").unwrap_or_else(|_| DEFAULT_ADDR.to_string());
     let listener = match TcpListener::bind(&addr).await {
         Ok(listener) => listener,
@@ -13,7 +28,7 @@ async fn main() {
         }
     };
     eprintln!("registry: listening on {addr}");
-    if let Err(err) = axum::serve(listener, registry::app())
+    if let Err(err) = axum::serve(listener, registry::app(store))
         .with_graceful_shutdown(shutdown())
         .await
     {

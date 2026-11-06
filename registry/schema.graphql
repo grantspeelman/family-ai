@@ -1,3 +1,31 @@
+"""
+A family's account.
+"""
+type Account {
+	"""
+	The id the registry assigned to the account.
+	"""
+	id: ID!
+	"""
+	The account's email, trimmed of surrounding whitespace.
+	"""
+	email: String!
+	"""
+	The family's name, trimmed of surrounding whitespace.
+	"""
+	familyName: String!
+}
+
+type Mutation {
+	"""
+	Creates an account from an email and a family name. Surrounding
+	whitespace is trimmed from both. Errors carry `extensions.code`:
+	`INVALID_EMAIL`, `INVALID_FAMILY_NAME` (empty or over 200 characters),
+	`EMAIL_TAKEN` (ignoring letter case) or `INTERNAL`.
+	"""
+	createAccount(email: String!, familyName: String!): Account!
+}
+
 type Query {
 	"""
 	The version of the registry app that is answering.
@@ -15,4 +43,5 @@ Directs the executor to skip this field or fragment when the `if` argument is tr
 directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
 schema {
 	query: Query
+	mutation: Mutation
 }
