@@ -14,13 +14,61 @@ type Account {
 	The family's name, trimmed of surrounding whitespace.
 	"""
 	familyName: String!
+	"""
+	Where the account's family app is in being set up.
+	"""
+	status: AccountStatus!
+	"""
+	The family app's base URL. Null unless the status is `READY`.
+	"""
+	address: String
+}
+
+"""
+An account's provisioning status, without any personal data.
+"""
+type AccountProvisioning {
+	"""
+	The account's id.
+	"""
+	id: ID!
+	"""
+	Where the account's family app is in being set up.
+	"""
+	status: AccountStatus!
+	"""
+	The family app's base URL, such as `http://[fdaa::3]:8080`. Null
+	unless the status is `READY`.
+	"""
+	address: String
+}
+
+"""
+Where an account's family app is in being set up.
+"""
+enum AccountStatus {
+	"""
+	The family app's Fly resources are being created.
+	"""
+	PROVISIONING
+	"""
+	The family app is running at the account's address.
+	"""
+	READY
+	"""
+	Provisioning failed, timed out or was interrupted by a restart.
+	"""
+	FAILED
 }
 
 type Mutation {
 	"""
 	Creates an account from an email and a family name. Surrounding
-	whitespace is trimmed from both. Errors carry `extensions.code`:
+	whitespace is trimmed from both. The account comes back as
+	`PROVISIONING` while its family app is set up in the background; poll
+	`accountStatus` for the outcome. Errors carry `extensions.code`:
 	`INVALID_EMAIL`, `INVALID_FAMILY_NAME` (empty or over 200 characters),
+	`PROVISIONING_UNAVAILABLE` (the registry has no Fly API configured),
 	`EMAIL_TAKEN` (ignoring letter case) or `INTERNAL`.
 	"""
 	createAccount(email: String!, familyName: String!): Account!
@@ -31,6 +79,12 @@ type Query {
 	The version of the registry app that is answering.
 	"""
 	apiVersion: String!
+	"""
+	The provisioning status and address of an account, for polling after
+	`createAccount`. Carries no email or family name, because it needs no
+	auth yet and ids are guessable. Null for an unknown or malformed id.
+	"""
+	accountStatus(id: ID!): AccountProvisioning
 }
 
 """

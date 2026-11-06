@@ -2,13 +2,15 @@
 
 pub mod accounts;
 pub mod fly;
+pub mod provisioning;
 
 use accounts::{AccountStore, StoreError};
 use async_graphql::{
-    Context, EmptySubscription, ErrorExtensions, ID, Object, Schema, SimpleObject,
+    Context, EmptySubscription, Enum, ErrorExtensions, ID, Object, Schema, SimpleObject,
 };
 use async_graphql_axum::GraphQL;
 use axum::{Router, routing::get, routing::post_service};
+use provisioning::Provisioner;
 
 /// The root of every GraphQL query.
 pub struct Query;
@@ -18,6 +20,67 @@ impl Query {
     /// The version of the registry app that is answering.
     async fn api_version(&self) -> &'static str {
         env!("CARGO_PKG_VERSION")
+    }
+
+    /// The provisioning status and address of an account, for polling after
+    /// `createAccount`. Carries no email or family name, because it needs no
+    /// auth yet and ids are guessable. Null for an unknown or malformed id.
+    async fn account_status(
+        &self,
+        ctx: &Context<'_>,
+        id: ID,
+    ) -> async_graphql::Result<Option<AccountProvisioning>> {
+        let Ok(id) = id.parse::<i64>() else {
+            return Ok(None);
+        };
+        let store = ctx.data::<AccountStore>().map_err(|_| internal_error())?;
+        match store.get(id).await {
+            Ok(account) => Ok(account.map(AccountProvisioning::from)),
+            Err(_) => Err(internal_error()),
+        }
+    }
+}
+
+/// Where an account's family app is in being set up.
+#[derive(Enum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccountStatus {
+    /// The family app's Fly resources are being created.
+    Provisioning,
+    /// The family app is running at the account's address.
+    Ready,
+    /// Provisioning failed, timed out or was interrupted by a restart.
+    Failed,
+}
+
+impl From<accounts::Status> for AccountStatus {
+    fn from(status: accounts::Status) -> Self {
+        match status {
+            accounts::Status::Provisioning => Self::Provisioning,
+            accounts::Status::Ready => Self::Ready,
+            accounts::Status::Failed => Self::Failed,
+        }
+    }
+}
+
+/// An account's provisioning status, without any personal data.
+#[derive(SimpleObject)]
+pub struct AccountProvisioning {
+    /// The account's id.
+    id: ID,
+    /// Where the account's family app is in being set up.
+    status: AccountStatus,
+    /// The family app's base URL, such as `http://[fdaa::3]:8080`. Null
+    /// unless the status is `READY`.
+    address: Option<String>,
+}
+
+impl From<accounts::Account> for AccountProvisioning {
+    fn from(account: accounts::Account) -> Self {
+        Self {
+            id: ID(account.id.to_string()),
+            status: account.status.into(),
+            address: account.address,
+        }
     }
 }
 
@@ -35,6 +98,10 @@ pub struct Account {
     email: String,
     /// The family's name, trimmed of surrounding whitespace.
     family_name: String,
+    /// Where the account's family app is in being set up.
+    status: AccountStatus,
+    /// The family app's base URL. Null unless the status is `READY`.
+    address: Option<String>,
 }
 
 impl From<accounts::Account> for Account {
@@ -43,6 +110,8 @@ impl From<accounts::Account> for Account {
             id: ID(account.id.to_string()),
             email: account.email,
             family_name: account.family_name,
+            status: account.status.into(),
+            address: account.address,
         }
     }
 }
@@ -53,8 +122,11 @@ pub struct Mutation;
 #[Object]
 impl Mutation {
     /// Creates an account from an email and a family name. Surrounding
-    /// whitespace is trimmed from both. Errors carry `extensions.code`:
+    /// whitespace is trimmed from both. The account comes back as
+    /// `PROVISIONING` while its family app is set up in the background; poll
+    /// `accountStatus` for the outcome. Errors carry `extensions.code`:
     /// `INVALID_EMAIL`, `INVALID_FAMILY_NAME` (empty or over 200 characters),
+    /// `PROVISIONING_UNAVAILABLE` (the registry has no Fly API configured),
     /// `EMAIL_TAKEN` (ignoring letter case) or `INTERNAL`.
     async fn create_account(
         &self,
@@ -77,10 +149,22 @@ impl Mutation {
                 "INVALID_FAMILY_NAME",
             ));
         }
-        let internal = || coded_error("Something went wrong. Try again later.", "INTERNAL");
-        let store = ctx.data::<AccountStore>().map_err(|_| internal())?;
+        let Some(provisioner) = ctx
+            .data::<Option<Provisioner>>()
+            .ok()
+            .and_then(Option::as_ref)
+        else {
+            return Err(coded_error(
+                "Accounts cannot be created right now.",
+                "PROVISIONING_UNAVAILABLE",
+            ));
+        };
+        let store = ctx.data::<AccountStore>().map_err(|_| internal_error())?;
         match store.create(email, family_name).await {
-            Ok(account) => Ok(account.into()),
+            Ok(account) => {
+                provisioner.spawn(store.clone(), account.id);
+                Ok(account.into())
+            }
             Err(StoreError::DuplicateEmail) => Err(coded_error(
                 "An account with this email already exists.",
                 "EMAIL_TAKEN",
@@ -91,6 +175,10 @@ impl Mutation {
             )),
         }
     }
+}
+
+fn internal_error() -> async_graphql::Error {
+    coded_error("Something went wrong. Try again later.", "INTERNAL")
 }
 
 fn coded_error(message: &str, code: &'static str) -> async_graphql::Error {
@@ -116,16 +204,22 @@ fn is_valid_email(email: &str) -> bool {
 
 pub type RegistrySchema = Schema<Query, Mutation, EmptySubscription>;
 
-/// Builds the GraphQL schema, with `store` as shared data for the resolvers.
-pub fn schema(store: AccountStore) -> RegistrySchema {
+/// Builds the GraphQL schema, with `store` and `provisioner` as shared data
+/// for the resolvers. Without a provisioner, `createAccount` returns
+/// `PROVISIONING_UNAVAILABLE` and stores nothing.
+pub fn schema(store: AccountStore, provisioner: Option<Provisioner>) -> RegistrySchema {
     Schema::build(Query, Mutation, EmptySubscription)
         .data(store)
+        .data(provisioner)
         .finish()
 }
 
 /// Builds the HTTP app: `POST /graphql` and `GET /healthz`.
-pub fn app(store: AccountStore) -> Router {
+pub fn app(store: AccountStore, provisioner: Option<Provisioner>) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        .route("/graphql", post_service(GraphQL::new(schema(store))))
+        .route(
+            "/graphql",
+            post_service(GraphQL::new(schema(store, provisioner))),
+        )
 }
