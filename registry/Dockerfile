@@ -19,9 +19,11 @@ RUN cargo build --release --locked -p registry
 
 FROM debian:trixie-slim
 # A fixed UID, so volume ownership does not depend on the host.
-RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin registry
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin registry \
+    && mkdir /data && chown 10001 /data
 COPY --from=build /src/target/release/registry /usr/local/bin/registry
 ENV REGISTRY_ADDR=0.0.0.0:8080
+ENV REGISTRY_DB_PATH=/data/registry.db
 EXPOSE 8080
 USER 10001
 ENTRYPOINT ["/usr/local/bin/registry"]
