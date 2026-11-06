@@ -87,7 +87,7 @@ curl -s -XPOST http://127.0.0.1:4280/v1/apps/fam-1/machines -H 'content-type: ap
 
 ## Contract
 
-`tests/fixtures/openapi.json` is a snapshot of Fly's Machines OpenAPI spec (OpenAPI 3.1.0), fetched from <https://docs.fly.io/api/machines/openapi.json> on 2026-11-01. `tests/machines_api.rs` uses the `jsonschema` crate to check requests and responses against the spec's schema for each path, method and status. `$ref`s are resolved against the whole spec. Responses with a status the spec does not list are checked against `ErrorResponse`. To refresh the snapshot, download the file again, update the date here, and run the tests.
+`tests/fixtures/openapi.json` is a snapshot of Fly's Machines OpenAPI spec (OpenAPI 3.1.0), fetched from <https://docs.fly.io/api/machines/openapi.json> on 2026-11-01. `tests/machines_api.rs` uses the `jsonschema` crate to check requests and responses against the spec's schema for each path, method and status. `$ref`s are resolved against the whole spec. Responses with a status the spec does not list are checked against `ErrorResponse`. The registry reads the same snapshot in `registry/tests/fly_contract.rs` to check what its Fly client sends and decodes. To refresh the snapshot, download the file again, update the date here, and run the tests here and `cargo test --locked -p registry --test fly_contract`.
 
 ## Tests
 
