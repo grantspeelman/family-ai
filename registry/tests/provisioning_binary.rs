@@ -176,8 +176,14 @@ async fn startup_fails_interrupted_accounts_and_failures_log_no_personal_data() 
     let stderr = running.wait_for(&line).await;
 
     assert!(stderr.contains(&line), "stderr: {stderr}");
-    for secret in [EMAIL, FAMILY, TOKEN_MARKER, "old@example.com"] {
-        assert!(!stderr.contains(secret), "{secret} in stderr: {stderr}");
+    let checks = [
+        ("the new email", EMAIL),
+        ("the new family name", FAMILY),
+        ("the token marker", TOKEN_MARKER),
+        ("the interrupted account's email", "old@example.com"),
+    ];
+    for (label, value) in checks {
+        assert!(!stderr.contains(value), "{label} is in stderr");
     }
 }
 

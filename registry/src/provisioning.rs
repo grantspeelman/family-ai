@@ -82,9 +82,9 @@ impl Provisioner {
     }
 
     /// Starts provisioning the account in a background task and returns at once.
-    pub fn spawn(&self, store: AccountStore, account_id: i64) {
+    pub fn spawn(&self, store: AccountStore, id: i64) {
         let provisioner = self.clone();
-        tokio::spawn(async move { provisioner.run(&store, account_id).await });
+        tokio::spawn(async move { provisioner.run(&store, id).await });
     }
 
     async fn run(&self, store: &AccountStore, id: i64) {
