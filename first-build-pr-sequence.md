@@ -42,12 +42,12 @@ Also in PR 0:
 | 6 | Scaffold the Rust family app | Boots, connects to SQLite on its volume, runs migrations, creates the table. |
 | 7 | Family app tooling | Folded into PR 2. The tooling is workspace-wide, so the family app is covered when it joins the workspace. |
 | 8 | Round-trip endpoint | Write a row, read it back — real proof of the database round trip, not a hello-world reply. |
-| 9 | End-to-end test suite | Lands after PR 10. The Flutter app, registry, mock and family app together, asserting the full chain end to end. Starts with the e2e setup (#53), then #62. |
+| 9 | End-to-end test suite | Lands after PRs 10 and 11. The Flutter app, registry, mock and family app together, asserting the full chain end to end. Starts with the e2e setup (#53), then #62. |
 | 10 | Front end: form and waiting state | Account creation form, waiting state while the Machine boots. Preceded by the Flutter skeleton PR (#83). Also adds registry CORS. Tested with widget tests using fake clients. Issue #84. |
 | 11 | Front end: direct handoff | Once ready, talks directly to the family app's address (not proxied through the registry) and shows the real response. Also adds family app CORS. Tested with widget tests using fake clients. Issue #85. |
 | 12 | Persistence re-check | After an idle period (an hour or more), re-run the registry flow and confirm the earlier row is still on the volume. |
 
-**Build order.** PR numbers stay stable, so they no longer give the build order. The front end comes before the end-to-end suite, and PR 9 now lands after PR 10. The order is the Flutter skeleton (#83), then PR 10 (#84), then PR 11 (#85). The e2e setup (#53) also follows PR 10, and #62 follows #53.
+**Build order.** PR numbers stay stable, so they no longer give the build order. The front end comes before the end-to-end suite, and PR 9 now lands after PRs 10 and 11. The order is the Flutter skeleton (#83), then PR 10 (#84), then PR 11 (#85), then the e2e setup (#53), then #62.
 
 **PR 12 addition — boot timing.** Record cold boot time end to end (app create → volume attach → Machine start → app ready) and Rust family app startup time as logged metrics during the persistence check, rather than a tight blocking gate. The architecture notes (not in this repo) flag this as genuinely unmeasured — Firecracker itself boots in roughly 125 milliseconds, but the rest of the path (disk attach, mount, app start, migrations) has no real numbers yet. Assert only a generous sanity ceiling in CI for now (e.g. under 5 seconds, not 500 milliseconds) so a real regression still fails the build without chasing CI noise. Once real numbers exist, tighten the threshold with data instead of a guess.
 
@@ -66,7 +66,10 @@ PRs 2–9 are queued on the factory board as issues #45–#62. The Flutter skele
 - One SQLite stack for the workspace: `sqlx`, with migrations as `.sql` files under each app's `migrations/`.
 - Accounts take an email and a family name. The email is unique, ignoring letter case. Keycloak is the planned identity provider and comes later; the account store is shaped so its subject id can take over the identity. Until auth exists, the polling query `accountStatus` returns only status and address, never personal data.
 - The front end comes before the end-to-end suite. #84 is blocked by #83, #60 and #61. #85 is blocked by #84.
-- The e2e setup (#53) is blocked by #84 and will be re-specced around the Flutter app. It is not done. #62 follows #53.
+- The e2e setup (#53) is blocked by #84, #85, #58 and #59, and by the closed #50 and #51. It lands after PR 11. It is not done.
+- #53 was re-specced. Its Chrome test always covers the form, the waiting state and the direct handoff. It owns the harness, the registry-to-Fly-mock wiring and teardown.
+- #53 is human-merged, because it adds a CI job and widens the allowed paths.
+- #62 follows #53 and uses its harness. #62 was trimmed to an API-level round trip, with exact contract checks and step-by-step failure messages.
 - PR #82, the backend-only e2e skeleton, was closed unmerged.
 - Once the e2e setup lands, the end-to-end suite will run on every PR as part of the required `ci` check.
 - Until the e2e setup lands, nothing tests a real browser making the cross-origin calls.
@@ -88,7 +91,7 @@ PRs 2–9 are queued on the factory board as issues #45–#62. The Flutter skele
 | #50 | Fly mock crate skeleton | PR 4 | #45, #46 | skim |
 | #51 | family app crate skeleton | PR 6 | #45, #46 | skim |
 | #52 | registry dependencies | PRs 3, 5 | #50 | skim |
-| #53 | end-to-end setup, to be re-specced around the Flutter app | PR 9 | #50, #51, #84 | skim |
+| #53 | end-to-end setup: harness, wiring, teardown, Chrome test | PR 9 | #50, #51, #84, #85, #58, #59 | close read |
 | #54 | Fly mock: create app, volume, Machine | PR 4 | #50 | close read |
 | #55 | family app: SQLite on its volume | PR 6 | #51 | close read |
 | #56 | registry: account store | PR 3 | #52 | close read |
@@ -97,7 +100,7 @@ PRs 2–9 are queued on the factory board as issues #45–#62. The Flutter skele
 | #59 | Fly mock starts the family app | PR 4 | #54, #55 | close read |
 | #60 | registry: createAccount mutation | PR 3 | #56 | close read |
 | #61 | registry: account provisioning | PR 5 | #60, #57 | close read |
-| #62 | end-to-end: account to round trip | PR 9 | #53, #61, #59, #58 | skim |
+| #62 | end-to-end: API-level round trip | PR 9 | #53, #61, #59, #58 | skim |
 | #83 | Flutter app skeleton | Before PR 10 | — | close read |
 | #84 | front end: form and waiting state, registry CORS | PR 10 | #83, #60, #61 | close read |
 | #85 | front end: direct handoff, family app CORS | PR 11 | #84 | close read |
@@ -123,7 +126,7 @@ flowchart LR
     i59["#59 mock starts family app"]
     i60["#60 createAccount"]
     i61["#61 account provisioning"]
-    i62["#62 end-to-end test"]
+    i62["#62 API round trip"]
     i83["#83 Flutter skeleton"]
     i84["#84 form and waiting state"]
     i85["#85 direct handoff"]
@@ -155,6 +158,9 @@ flowchart LR
     i61 --> i84
     i84 --> i85
     i84 --> i53
+    i85 --> i53
+    i58 --> i53
+    i59 --> i53
 ```
 
 Real Fly needs a later job that waits for a Machine to start, since real Fly returns `created` from create-Machine.
