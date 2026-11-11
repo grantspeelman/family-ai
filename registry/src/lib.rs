@@ -169,10 +169,7 @@ impl Mutation {
                 "An account with this email already exists.",
                 "EMAIL_TAKEN",
             )),
-            Err(_) => Err(coded_error(
-                "Something went wrong. Try again later.",
-                "INTERNAL",
-            )),
+            Err(_) => Err(internal_error()),
         }
     }
 }

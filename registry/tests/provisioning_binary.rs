@@ -1,30 +1,24 @@
 //! The registry binary's provisioning config, startup step and log lines.
 
 use std::{
-    io::{BufRead, BufReader},
-    process::{Child, Command, Output, Stdio},
-    sync::{Arc, Mutex, mpsc},
-    thread,
+    process::{Command, Output},
     time::{Duration, Instant},
 };
 
 use registry::accounts::{AccountStore, Status};
-use serde_json::{Value, json};
+use serde_json::json;
 
 mod common;
+
+use common::Running;
 
 const TOKEN_MARKER: &str = "token-marker-7f3e9c";
 const EMAIL: &str = "zed.provisioning@example.com";
 const FAMILY: &str = "Quixotic-Familyname";
-const LISTENING: &str = "registry: listening on ";
 
 fn registry() -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_registry"));
-    command
-        .env("REGISTRY_ADDR", "127.0.0.1:0")
-        .env("FLY_API_TOKEN", TOKEN_MARKER)
-        .env_remove("FLY_API_HOSTNAME")
-        .env_remove("REGISTRY_FAMILY_APP_PORT");
+    let mut command = common::registry_command();
+    command.env("FLY_API_TOKEN", TOKEN_MARKER);
     command
 }
 
@@ -60,78 +54,6 @@ fn a_bad_machine_port_exits_naming_the_variable() {
             .output()
             .unwrap();
         assert_clean_failure(&output, "REGISTRY_FAMILY_APP_PORT");
-    }
-}
-
-/// A running registry binary, killed on drop, with its stderr collected.
-struct Running {
-    child: Child,
-    base_url: String,
-    stderr: Arc<Mutex<String>>,
-}
-
-impl Running {
-    fn start(mut command: Command) -> Self {
-        let mut child = command.stderr(Stdio::piped()).spawn().unwrap();
-        let stderr = child.stderr.take().unwrap();
-        let collected = Arc::new(Mutex::new(String::new()));
-        let (addr_tx, addr_rx) = mpsc::channel();
-        let sink = collected.clone();
-        thread::spawn(move || {
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                {
-                    let mut sink = sink.lock().unwrap();
-                    sink.push_str(&line);
-                    sink.push('\n');
-                }
-                if let Some(addr) = line.strip_prefix(LISTENING) {
-                    let _ = addr_tx.send(addr.to_owned());
-                }
-            }
-        });
-        let addr = addr_rx
-            .recv_timeout(Duration::from_secs(30))
-            .expect("the registry did not start");
-        Self {
-            child,
-            base_url: format!("http://{addr}"),
-            stderr: collected,
-        }
-    }
-
-    async fn graphql(&self, query: &str, variables: Value) -> Value {
-        reqwest::Client::new()
-            .post(format!("{}/graphql", self.base_url))
-            .json(&json!({ "query": query, "variables": variables }))
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap()
-    }
-
-    /// Waits up to a few seconds for stderr to contain `text`.
-    async fn wait_for(&self, text: &str) -> String {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            let stderr = self.stderr();
-            if stderr.contains(text) || Instant::now() > deadline {
-                return stderr;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    }
-
-    fn stderr(&self) -> String {
-        self.stderr.lock().unwrap().clone()
-    }
-}
-
-impl Drop for Running {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
     }
 }
 
@@ -197,4 +119,62 @@ fn without_fly_the_registry_starts_and_says_provisioning_is_disabled() {
 
     assert!(stderr.contains("provisioning is disabled"), "{stderr}");
     assert!(!stderr.contains(TOKEN_MARKER), "{stderr}");
+}
+
+#[tokio::test]
+async fn store_failures_during_provisioning_are_logged_without_personal_data() {
+    let db = common::fresh_db("binary-store-failure");
+    drop(AccountStore::open(&db).await.unwrap());
+    // Inserting still works, so createAccount succeeds, but recording the Fly
+    // app name and then the failure both fail.
+    common::execute_sql(&db, common::BLOCK_ACCOUNT_UPDATES).await;
+    let (fly, _) = common::stub(|_| common::Reply::With(200, "{}".to_owned())).await;
+    let mut command = registry();
+    command
+        .env("REGISTRY_DB_PATH", &db)
+        .env("FLY_API_HOSTNAME", fly);
+    let running = Running::start(command);
+
+    let created = running
+        .graphql(
+            "mutation($e: String!, $f: String!) { createAccount(email: $e, familyName: $f) { id } }",
+            json!({ "e": EMAIL, "f": FAMILY }),
+        )
+        .await;
+    let id = created["data"]["createAccount"]["id"].as_str().unwrap();
+    let not_recorded = format!("cannot record provisioning of account {id}");
+    let stderr = running.wait_for(&not_recorded).await;
+
+    let failed = format!("provisioning account {id} failed: account database error");
+    assert!(stderr.contains(&failed), "stderr: {stderr}");
+    assert!(stderr.contains(&not_recorded), "stderr: {stderr}");
+    for value in [EMAIL, FAMILY, TOKEN_MARKER] {
+        assert!(!stderr.contains(value), "{value} is in stderr: {stderr}");
+    }
+}
+
+#[test]
+fn an_http_client_that_cannot_be_built_exits_naming_the_fly_config() {
+    // Only certificates that do not parse, so the TLS setup fails.
+    let certs = common::fresh_db("binary-bad-certs").with_extension("pem");
+    std::fs::write(
+        &certs,
+        "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
+    )
+    .unwrap();
+
+    let output = registry()
+        .env("REGISTRY_DB_PATH", common::fresh_db("binary-bad-certs"))
+        .env("FLY_API_HOSTNAME", "http://127.0.0.1:9")
+        .env("SSL_CERT_FILE", &certs)
+        .env_remove("SSL_CERT_DIR")
+        .output()
+        .unwrap();
+
+    assert_clean_failure(&output, "cannot build the HTTP client");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid Fly API config"),
+        "stderr: {stderr}"
+    );
 }

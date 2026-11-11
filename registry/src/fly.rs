@@ -128,8 +128,9 @@ pub enum FlyError {
     /// The request could not be sent, or no complete response came back. The
     /// message has the base URL and the cause.
     Transport { message: String },
-    /// A 2xx response whose body does not match the expected type. The message
-    /// says how, and can quote the body, with any token removed.
+    /// A 2xx response whose body cannot be read in full or does not match the
+    /// expected type. The message says how, and can quote the body, with any
+    /// token removed.
     Decode { message: String },
     /// `FLY_API_HOSTNAME` is missing or not a valid URL, or the config cannot be
     /// used, for example because `FLY_API_TOKEN` cannot go in a header.
@@ -325,15 +326,11 @@ impl FlyClient {
         })
     }
 
+    /// reqwest reports a body that cannot be read in full as a decode error
+    /// too, so every error here is [`FlyError::Decode`].
     async fn decode<T: DeserializeOwned>(&self, response: Response) -> Result<T, FlyError> {
-        response.json().await.map_err(|error| {
-            if error.is_decode() {
-                FlyError::Decode {
-                    message: self.redact(causes(&error)),
-                }
-            } else {
-                self.transport_error(&error)
-            }
+        response.json().await.map_err(|error| FlyError::Decode {
+            message: self.redact(causes(&error)),
         })
     }
 

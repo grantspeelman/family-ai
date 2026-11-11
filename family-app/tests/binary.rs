@@ -8,7 +8,7 @@ use std::{
     io::{ErrorKind, Read, Write},
     net::{TcpListener, TcpStream},
     path::Path,
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     sync::mpsc::{self, RecvTimeoutError},
     thread,
     time::{Duration, Instant},
@@ -21,12 +21,49 @@ use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 const BIN: &str = env!("CARGO_BIN_EXE_family-app");
 const START_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const STOP_TIMEOUT: Duration = Duration::from_secs(10);
+const LISTENING: &str = "family-app: listening on ";
 
-/// Kills the child on drop, so a failing assertion does not leak it.
+/// Stops the child on drop, so a failing assertion does not leak it. SIGTERM
+/// first, so the run still counts towards coverage, then SIGKILL.
 struct Running(Child);
+
+impl Running {
+    /// Sends a signal by name, such as `TERM` or `INT`, with the shell's `kill`
+    /// builtin, since slim images have no `kill` program.
+    fn signal(&self, name: &str) -> bool {
+        Command::new("sh")
+            .args([
+                "-c",
+                r#"kill -s "$1" "$2""#,
+                "sh",
+                name,
+                &self.0.id().to_string(),
+            ])
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+
+    /// Waits up to `STOP_TIMEOUT` for the app to exit, or `None`.
+    fn wait_for_exit(&mut self) -> Option<ExitStatus> {
+        let deadline = Instant::now() + STOP_TIMEOUT;
+        loop {
+            if let Some(status) = self.0.try_wait().unwrap() {
+                return Some(status);
+            }
+            if Instant::now() > deadline {
+                return None;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
 
 impl Drop for Running {
     fn drop(&mut self) {
+        if self.signal("TERM") && self.wait_for_exit().is_some() {
+            return;
+        }
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
@@ -37,7 +74,7 @@ fn free_addr() -> String {
     listener.local_addr().unwrap().to_string()
 }
 
-/// Starts the binary and waits for its "listening" line, which comes after the
+/// Starts the binary and waits for its whole "listening" line, which comes after the
 /// database is open. Panics with the log so far if the app exits first or
 /// `START_TIMEOUT` passes; `Running` then kills the child as the panic unwinds.
 /// Returns the running app and the log.
@@ -65,7 +102,11 @@ fn start(data_dir: &Path, addr: &str) -> (Running, String) {
             Ok(chunk) => {
                 log.extend_from_slice(&chunk);
                 let text = String::from_utf8_lossy(&log);
-                if text.contains("listening on") {
+                // The whole line, so the address in it is complete.
+                if text
+                    .split_once("listening on")
+                    .is_some_and(|(_, rest)| rest.contains('\n'))
+                {
                     return (running, text.into_owned());
                 }
             }
@@ -271,4 +312,68 @@ fn empty_data_dir_is_treated_as_unset() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("FAMILY_APP_DATA_DIR"), "stderr: {stderr}");
+}
+
+/// The address from the log's "listening on" line.
+fn listening_addr(log: &str) -> &str {
+    log.lines()
+        .find_map(|line| line.strip_prefix(LISTENING))
+        .unwrap_or_else(|| panic!("no listening line; stderr: {log}"))
+}
+
+/// Sends `signal` and checks that the app exits with status 0 in time.
+fn assert_stops_cleanly_on(mut running: Running, signal: &str) {
+    assert!(running.signal(signal), "could not send SIG{signal}");
+    let status = running
+        .wait_for_exit()
+        .unwrap_or_else(|| panic!("the app did not stop on SIG{signal}"));
+    assert!(status.success(), "{status}");
+}
+
+#[test]
+fn logs_the_bound_port_serves_healthz_and_stops_cleanly_on_sigterm() {
+    let dir = TempDir::new("sigterm");
+    let (running, log) = start(dir.path(), "127.0.0.1:0");
+
+    let addr = listening_addr(&log);
+    assert!(addr.starts_with("127.0.0.1:"), "stderr: {log}");
+    assert!(
+        !addr.ends_with(":0"),
+        "the log shows the requested port: {log}"
+    );
+    let response = request(
+        addr,
+        "GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+    assert!(response.starts_with("HTTP/1.1 200"), "response: {response}");
+
+    assert_stops_cleanly_on(running, "TERM");
+}
+
+#[test]
+fn stops_cleanly_on_ctrl_c() {
+    let dir = TempDir::new("sigint");
+    let (running, _) = start(dir.path(), "127.0.0.1:0");
+
+    assert_stops_cleanly_on(running, "INT");
+}
+
+#[test]
+fn address_in_use_exits_with_status_1_naming_the_address() {
+    let dir = TempDir::new("in-use");
+    let taken = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = taken.local_addr().unwrap().to_string();
+
+    let output = Command::new(BIN)
+        .env("FAMILY_APP_DATA_DIR", dir.path())
+        .env("FAMILY_APP_ADDR", &addr)
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(&format!("cannot listen on {addr}")),
+        "stderr: {stderr}"
+    );
 }
