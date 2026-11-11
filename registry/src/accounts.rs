@@ -42,6 +42,18 @@ impl fmt::Display for MissingDbPath {
 
 impl Error for MissingDbPath {}
 
+/// Where an account's Fly app, volume and Machine are.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "TEXT", rename_all = "lowercase")]
+pub enum Status {
+    /// A background task is creating the Fly resources.
+    Provisioning,
+    /// The family app is running at the account's address.
+    Ready,
+    /// Provisioning failed, timed out or was interrupted by a restart.
+    Failed,
+}
+
 /// A family's account.
 #[derive(Clone, Debug, PartialEq, Eq, sqlx::FromRow)]
 pub struct Account {
@@ -49,7 +61,16 @@ pub struct Account {
     pub id: i64,
     pub email: String,
     pub family_name: String,
+    pub status: Status,
+    /// The family app's base URL. Set only when the status is `Ready`.
+    pub address: Option<String>,
+    pub fly_app_name: Option<String>,
+    pub fly_volume_id: Option<String>,
+    pub fly_machine_id: Option<String>,
 }
+
+const ACCOUNT_COLUMNS: &str =
+    "id, email, family_name, status, address, fly_app_name, fly_volume_id, fly_machine_id";
 
 /// What can go wrong in the store.
 #[derive(Debug)]
@@ -121,25 +142,100 @@ impl AccountStore {
     /// Creates an account, or returns [`StoreError::DuplicateEmail`] if the
     /// email is taken. Both values are stored exactly as given.
     pub async fn create(&self, email: &str, family_name: &str) -> Result<Account, StoreError> {
-        let account = sqlx::query_as(
-            "INSERT INTO accounts (email, email_key, family_name) VALUES (?, ?, ?) \
-             RETURNING id, email, family_name",
-        )
-        .bind(email)
-        .bind(email_key(email))
-        .bind(family_name)
-        .fetch_one(&self.pool)
-        .await?;
+        let sql = format!(
+            "INSERT INTO accounts (email, email_key, family_name, status) \
+             VALUES (?, ?, ?, 'provisioning') RETURNING {ACCOUNT_COLUMNS}"
+        );
+        let account = sqlx::query_as(&sql)
+            .bind(email)
+            .bind(email_key(email))
+            .bind(family_name)
+            .fetch_one(&self.pool)
+            .await?;
         Ok(account)
     }
 
     /// Fetches an account by id, or `None` if there is no such account.
     pub async fn get(&self, id: i64) -> Result<Option<Account>, StoreError> {
-        let account = sqlx::query_as("SELECT id, email, family_name FROM accounts WHERE id = ?")
+        let sql = format!("SELECT {ACCOUNT_COLUMNS} FROM accounts WHERE id = ?");
+        let account = sqlx::query_as(&sql)
             .bind(id)
             .fetch_optional(&self.pool)
             .await?;
         Ok(account)
+    }
+
+    /// Records the Fly app name of an account that is still provisioning.
+    pub async fn set_fly_app_name(&self, id: i64, name: &str) -> Result<(), StoreError> {
+        self.set_while_provisioning(id, "fly_app_name", name).await
+    }
+
+    /// Records the Fly volume id of an account that is still provisioning.
+    pub async fn set_fly_volume_id(&self, id: i64, volume_id: &str) -> Result<(), StoreError> {
+        self.set_while_provisioning(id, "fly_volume_id", volume_id)
+            .await
+    }
+
+    /// Records the Fly Machine id of an account that is still provisioning.
+    pub async fn set_fly_machine_id(&self, id: i64, machine_id: &str) -> Result<(), StoreError> {
+        self.set_while_provisioning(id, "fly_machine_id", machine_id)
+            .await
+    }
+
+    async fn set_while_provisioning(
+        &self,
+        id: i64,
+        column: &'static str,
+        value: &str,
+    ) -> Result<(), StoreError> {
+        let sql =
+            format!("UPDATE accounts SET {column} = ? WHERE id = ? AND status = 'provisioning'");
+        sqlx::query(&sql)
+            .bind(value)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Marks an account that is still provisioning as ready at `address`.
+    /// Returns whether a row changed.
+    pub async fn mark_ready(&self, id: i64, address: &str) -> Result<bool, StoreError> {
+        let result = sqlx::query(
+            "UPDATE accounts SET status = 'ready', address = ? \
+             WHERE id = ? AND status = 'provisioning'",
+        )
+        .bind(address)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Marks an account that is still provisioning as failed. Returns whether
+    /// a row changed.
+    pub async fn mark_failed(&self, id: i64) -> Result<bool, StoreError> {
+        let result = sqlx::query(
+            "UPDATE accounts SET status = 'failed', address = NULL \
+             WHERE id = ? AND status = 'provisioning'",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Marks every account still provisioning as failed, because its task
+    /// died with the previous process. Run at startup, before serving.
+    /// Returns how many accounts changed.
+    pub async fn fail_interrupted(&self) -> Result<u64, StoreError> {
+        let result = sqlx::query(
+            "UPDATE accounts SET status = 'failed', address = NULL \
+             WHERE status = 'provisioning'",
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 }
 
