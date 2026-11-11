@@ -2,23 +2,20 @@
 //! address, with its volume mapped to a local directory.
 //!
 //! This crate does not declare tokio's `time` or `io-util` features, so waiting
-//! uses short `std::thread::sleep`s on the blocking pool, and the health check
-//! uses `TcpStream`'s `try_read` and `try_write`.
+//! uses short `std::thread::sleep`s, and the health check blocking `std` I/O
+//! with timeouts, both on the blocking pool.
 
 use std::{
     ffi::OsString,
-    io::ErrorKind,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    io::{BufRead, BufReader, Read, Write},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream},
     path::PathBuf,
     process::Stdio,
     sync::atomic::{AtomicU32, Ordering},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use tokio::{
-    net::TcpStream,
-    process::{Child, Command},
-};
+use tokio::process::{Child, Command};
 
 /// The family app's own default port.
 const DEFAULT_MACHINE_PORT: u16 = 8080;
@@ -26,7 +23,10 @@ const DEFAULT_START_TIMEOUT: Duration = Duration::from_secs(10);
 /// The pause between health checks, and the longest single sleep.
 const TICK: Duration = Duration::from_millis(25);
 /// A status line longer than this is not a healthy family app.
-const MAX_STATUS_LINE: usize = 256;
+const MAX_STATUS_LINE: u64 = 256;
+/// The longest one health check may block for, at each of connect, write and
+/// read. A check that times out fails, and the next one starts after a `TICK`.
+const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Passed from the mock to the family app when set: the coverage output path,
 /// so child runs count in the `coverage` CI job, and panic backtraces.
@@ -228,10 +228,10 @@ pub(crate) async fn start(plan: Plan) -> Result<Process, String> {
     let deadline = Instant::now() + plan.start_timeout;
     let failure = tokio::select! {
         () = poll_until_healthy(plan.addr.into()) => return Ok(Process { _child: child }),
-        status = child.wait() => match status {
-            Ok(status) => format!("family app exited before it was healthy: {status}; see the mock's output"),
-            Err(err) => format!("cannot wait for the family app: {err}"),
-        },
+        // If waiting fails, this branch is disabled and the time limit applies.
+        Ok(status) = child.wait() => format!(
+            "family app exited before it was healthy: {status}; see the mock's output"
+        ),
         () = sleep_until(deadline) => format!(
             "family app not healthy at {} within {:?}",
             plan.addr, plan.start_timeout
@@ -243,46 +243,31 @@ pub(crate) async fn start(plan: Plan) -> Result<Process, String> {
 }
 
 async fn poll_until_healthy(addr: SocketAddr) {
-    while !healthz_ok(addr).await.unwrap_or(false) {
+    while !healthz_ok(addr).await {
         sleep(TICK).await;
     }
 }
 
+/// Whether the family app at `addr` answers `GET /healthz` with a `200`.
+/// Runs on the blocking pool, like `sleep`, and is bounded by
+/// `HEALTH_CHECK_TIMEOUT` so shutting down the runtime never waits long.
+async fn healthz_ok(addr: SocketAddr) -> bool {
+    tokio::task::spawn_blocking(move || check_healthz(addr).unwrap_or(false))
+        .await
+        .unwrap_or(false)
+}
+
 /// Sends `GET /healthz` over plain HTTP/1.1 and checks for a `200` status line.
-async fn healthz_ok(addr: SocketAddr) -> std::io::Result<bool> {
-    let stream = TcpStream::connect(addr).await?;
-    let request = format!("GET /healthz HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n");
-    write_all(&stream, request.as_bytes()).await?;
-    let line = read_status_line(&stream).await?;
-    Ok(line.starts_with(b"HTTP/1.1 200 "))
-}
-
-async fn write_all(stream: &TcpStream, mut bytes: &[u8]) -> std::io::Result<()> {
-    while !bytes.is_empty() {
-        stream.writable().await?;
-        match stream.try_write(bytes) {
-            Ok(n) => bytes = &bytes[n..],
-            Err(err) if err.kind() == ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err),
-        }
-    }
-    Ok(())
-}
-
 /// Reads up to the first line end, the end of the stream or `MAX_STATUS_LINE`.
-async fn read_status_line(stream: &TcpStream) -> std::io::Result<Vec<u8>> {
+fn check_healthz(addr: SocketAddr) -> std::io::Result<bool> {
+    let mut stream = TcpStream::connect_timeout(&addr, HEALTH_CHECK_TIMEOUT)?;
+    stream.set_write_timeout(Some(HEALTH_CHECK_TIMEOUT))?;
+    stream.set_read_timeout(Some(HEALTH_CHECK_TIMEOUT))?;
+    let request = format!("GET /healthz HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n");
+    stream.write_all(request.as_bytes())?;
     let mut line = Vec::new();
-    let mut chunk = [0; MAX_STATUS_LINE];
-    while !line.contains(&b'\n') && line.len() < MAX_STATUS_LINE {
-        stream.readable().await?;
-        match stream.try_read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => line.extend_from_slice(&chunk[..n]),
-            Err(err) if err.kind() == ErrorKind::WouldBlock => {}
-            Err(err) => return Err(err),
-        }
-    }
-    Ok(line)
+    BufReader::new(stream.take(MAX_STATUS_LINE)).read_until(b'\n', &mut line)?;
+    Ok(line.starts_with(b"HTTP/1.1 200 "))
 }
 
 async fn sleep_until(deadline: Instant) {

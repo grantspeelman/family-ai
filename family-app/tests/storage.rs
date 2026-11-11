@@ -104,3 +104,46 @@ async fn missing_directory_is_an_error_and_is_not_created() {
     assert!(err.to_string().contains(&missing.display().to_string()));
     assert!(!missing.exists());
 }
+
+#[tokio::test]
+async fn a_database_file_that_cannot_be_opened_is_an_error_naming_it() {
+    let dir = TempDir::new("unopenable");
+    // A directory where the database file should be.
+    let path = dir.path().join("family.db");
+    std::fs::create_dir(&path).unwrap();
+
+    let err = db::open(dir.path()).await.unwrap_err();
+
+    assert!(matches!(err, db::Error::Open(..)), "{err:?}");
+    let text = err.to_string();
+    assert!(
+        text.starts_with(&format!("cannot open {}: ", path.display())),
+        "{text}"
+    );
+}
+
+#[tokio::test]
+async fn a_database_from_a_newer_family_app_is_a_migration_error_naming_it() {
+    let dir = TempDir::new("newer");
+    let pool = db::open(dir.path()).await.unwrap();
+    // A migration this build does not have, as if a newer family app had run.
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations \
+         (version, description, success, checksum, execution_time) \
+         VALUES (99999999999999, 'from the future', TRUE, x'00', 0)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.close().await;
+
+    let err = db::open(dir.path()).await.unwrap_err();
+
+    assert!(matches!(err, db::Error::Migrate(..)), "{err:?}");
+    let path = dir.path().join("family.db");
+    let text = err.to_string();
+    assert!(
+        text.starts_with(&format!("cannot migrate {}: ", path.display())),
+        "{text}"
+    );
+}

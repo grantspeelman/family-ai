@@ -270,10 +270,9 @@ jobs:
       # with CARGO_LLVM_COV_VERSION in .devcontainer/Dockerfile.
       CARGO_LLVM_COV_VERSION: 0.9.1
       CARGO_LLVM_COV_SHA256: 3fca950394a3c49457657c158b1619cec8dfd2647ae5b48746734c0ab969a522
-      # Minimum workspace line coverage, in percent. Deliberately generous: it
-      # catches a collapse (tests not running, say), not normal drift. main
-      # measured 19.61% when this was set. Tighten it later with real data.
-      COVERAGE_FLOOR: 5
+      # Minimum workspace line coverage, in percent. The owner chose 100%: every
+      # line runs under test, with no exclusions, and every PR must keep it.
+      COVERAGE_FLOOR: 100
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -60,7 +60,7 @@ PRs 2–9 are queued on the factory board as issues #45–#62. The Flutter skele
 **Decisions:**
 
 - Tooling is workspace-wide and set up once. PR 7 is folded into PR 2.
-- clippy + rustfmt and `cargo-deny` are strict gates and block feature work. Coverage, duplication and complexity fail only past generous thresholds and run alongside feature work. Tighten them later with real data.
+- clippy + rustfmt and `cargo-deny` are strict gates and block feature work. Line coverage is a strict gate too: the owner set its floor to 100% (#70), and every PR must keep it. Duplication and complexity fail only past generous thresholds and run alongside feature work. Tighten them later with real data.
 - Plumbing is split from logic. Crate skeletons, dependency additions and CI wiring land in small PRs a human skims and merges. Each crate skeleton also widens the factory's allowed paths for that crate's `src/`, `tests/` and README, plus `migrations/*.sql` for apps with a database, so follow-up jobs stay inside them.
 - API contracts and data handling stay in small PRs that get a close human read. The approver escalates them.
 - One SQLite stack for the workspace: `sqlx`, with migrations as `.sql` files under each app's `migrations/`.

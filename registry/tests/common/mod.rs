@@ -6,7 +6,7 @@
 use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     sync::{
         Arc, Mutex,
         atomic::{AtomicU32, Ordering},
@@ -29,6 +29,7 @@ use registry::{
     provisioning::Provisioner,
 };
 use serde_json::{Value, json};
+use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use tower::ServiceExt;
 
 const LISTENING: &str = "fly-mock: listening on ";
@@ -53,6 +54,153 @@ pub fn fresh_db(name: &str) -> PathBuf {
 /// Opens a store on a fresh database file.
 pub async fn fresh_store(name: &str) -> AccountStore {
     AccountStore::open(&fresh_db(name)).await.unwrap()
+}
+
+/// Runs `sql` on the database file at `path` through its own connection, for
+/// example to break the store under a running registry.
+pub async fn execute_sql(path: &Path, sql: &str) {
+    let options = SqliteConnectOptions::new().filename(path);
+    let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
+    sqlx::raw_sql(sql).execute(&mut connection).await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// Makes every later `UPDATE` of an account fail, while reads and inserts
+/// still work. Run it on a database the store has already migrated.
+pub const BLOCK_ACCOUNT_UPDATES: &str = "CREATE TRIGGER block_updates BEFORE UPDATE ON accounts \
+     BEGIN SELECT RAISE(ABORT, 'updates are blocked'); END";
+
+const REGISTRY_LISTENING: &str = "registry: listening on ";
+const REGISTRY_START_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a stop signal gets to end the registry.
+pub const REGISTRY_STOP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The registry binary with port 0 and no provisioning settings, so each test
+/// sets only what it is about.
+pub fn registry_command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_registry"));
+    command
+        .env("REGISTRY_ADDR", "127.0.0.1:0")
+        .env_remove("FLY_API_HOSTNAME")
+        .env_remove("FLY_API_TOKEN")
+        .env_remove("REGISTRY_FAMILY_APP_PORT");
+    command
+}
+
+/// A running registry binary with its stderr collected. Dropping it sends
+/// SIGTERM, so the run still counts towards coverage, and falls back to SIGKILL.
+pub struct Running {
+    child: Child,
+    pub base_url: String,
+    stderr: Arc<Mutex<String>>,
+}
+
+impl Running {
+    /// Starts `command` and waits for its "listening on" line.
+    pub fn start(mut command: Command) -> Self {
+        let mut child = command.stderr(Stdio::piped()).spawn().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let collected = Arc::new(Mutex::new(String::new()));
+        let (addr_tx, addr_rx) = mpsc::channel();
+        let sink = collected.clone();
+        // Keep reading until the process exits, so stderr never fills up.
+        thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                {
+                    let mut sink = sink.lock().unwrap();
+                    sink.push_str(&line);
+                    sink.push('\n');
+                }
+                if let Some(addr) = line.strip_prefix(REGISTRY_LISTENING) {
+                    let _ = addr_tx.send(addr.to_owned());
+                }
+            }
+        });
+        let Ok(addr) = addr_rx.recv_timeout(REGISTRY_START_TIMEOUT) else {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!(
+                "the registry did not start; stderr: {}",
+                collected.lock().unwrap()
+            );
+        };
+        Self {
+            child,
+            base_url: format!("http://{addr}"),
+            stderr: collected,
+        }
+    }
+
+    /// Sends a GraphQL request over HTTP and returns the JSON response.
+    pub async fn graphql(&self, query: &str, variables: Value) -> Value {
+        reqwest::Client::new()
+            .post(format!("{}/graphql", self.base_url))
+            .json(&json!({ "query": query, "variables": variables }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap()
+    }
+
+    /// Waits up to a few seconds for stderr to contain `text`.
+    pub async fn wait_for(&self, text: &str) -> String {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let stderr = self.stderr();
+            if stderr.contains(text) || Instant::now() > deadline {
+                return stderr;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    /// Everything the registry has written to stderr so far.
+    pub fn stderr(&self) -> String {
+        self.stderr.lock().unwrap().clone()
+    }
+
+    /// Sends a signal by name, such as `TERM` or `INT`.
+    pub fn signal(&self, name: &str) {
+        assert!(
+            send_signal(name, self.child.id()),
+            "could not send SIG{name}"
+        );
+    }
+
+    /// Waits up to `timeout` for the process to exit, or `None`.
+    pub fn wait_timeout(&mut self, timeout: Duration) -> Option<ExitStatus> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(status) = self.child.try_wait().unwrap() {
+                return Some(status);
+            }
+            if Instant::now() > deadline {
+                return None;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        send_signal("TERM", self.child.id());
+        if self.wait_timeout(REGISTRY_STOP_TIMEOUT).is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
+
+/// Sends a signal by name with the shell's `kill` builtin, since slim images
+/// have no `kill` program. Returns whether it was sent.
+pub fn send_signal(name: &str, pid: u32) -> bool {
+    Command::new("sh")
+        .args(["-c", r#"kill -s "$1" "$2""#, "sh", name, &pid.to_string()])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 /// A running `fly-mock` process, killed on drop.
@@ -117,10 +265,7 @@ impl Mock {
 impl Drop for Mock {
     fn drop(&mut self) {
         // `cargo run` replaces itself with the mock, so this signals the mock.
-        // `kill` through the shell, as a builtin: slim images have no program.
-        let _ = Command::new("sh")
-            .args(["-c", r#"kill "$1""#, "sh", &self.child.id().to_string()])
-            .status();
+        send_signal("TERM", self.child.id());
         let deadline = Instant::now() + MOCK_STOP_TIMEOUT;
         while matches!(self.child.try_wait(), Ok(None)) && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(20));

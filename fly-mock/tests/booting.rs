@@ -155,3 +155,25 @@ async fn config_image_is_ignored() {
     assert_eq!(status, StatusCode::OK, "{machine}");
     assert_healthy(&machine_addr(&machine, MACHINE_PORT));
 }
+
+#[tokio::test]
+async fn volume_directory_that_cannot_be_created_returns_500_naming_it() {
+    let root = TempDir::new();
+    // The data root is a file, so no volume directory can go inside it.
+    let file = root.path().join("not-a-directory");
+    std::fs::write(&file, "").unwrap();
+    let app = app_with(settings(family_app_bin(), &file));
+    let volume = app_with_volume(&app).await;
+
+    let (status, body) = post(&app, MACHINES, machine_body(&volume)).await;
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let message = body["error"].as_str().unwrap();
+    assert!(
+        message.contains(&format!(
+            "cannot create volume directory {}",
+            file.join(&volume).display()
+        )),
+        "{message}"
+    );
+}

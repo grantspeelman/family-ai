@@ -486,3 +486,83 @@ async fn request_bodies_use_flys_field_names_and_leave_out_unset_fields() {
         }})
     );
 }
+
+#[test]
+fn a_base_url_with_a_query_or_fragment_is_a_config_error() {
+    for value in ["http://host/?token=x", "http://host/#part"] {
+        let error = FlyConfig::new(value, None).unwrap_err();
+        assert!(matches!(error, FlyError::Config { .. }), "{error:?}");
+        assert!(
+            error
+                .to_string()
+                .contains("must not have a query or fragment"),
+            "{error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_404_without_a_message_says_only_404() {
+    let (base, _) = stub(404, "not json").await;
+    let error = client(&base, None).create_app("a", "o").await.unwrap_err();
+    assert!(matches!(error, FlyError::NotFound { .. }), "{error:?}");
+    assert_eq!(error.to_string(), "Fly API returned 404");
+}
+
+#[tokio::test]
+async fn an_invalid_app_name_error_says_which_names_are_invalid() {
+    let (base, _) = stub(200, MACHINE_BODY).await;
+    let error = client(&base, None).create_app("..", "o").await.unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "a Fly app name cannot be empty, `.` or `..`"
+    );
+}
+
+#[tokio::test]
+async fn a_body_cut_off_before_its_length_is_a_decode_error() {
+    use std::io::{Read, Write};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        let _ = socket.read(&mut [0; 4096]).unwrap();
+        // Promises 1000 bytes, sends a few, then closes the connection.
+        socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n{\"id\":")
+            .unwrap();
+    });
+
+    let error = client(&base, None)
+        .create_machine("a", &bare_machine_request())
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, FlyError::Decode { .. }), "{error:?}");
+    assert!(error.to_string().contains("message length"), "{error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_variable_that_is_not_utf8_is_a_config_error_naming_it() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let not_utf8 = || OsString::from_vec(vec![b'h', 0xff]);
+    for variable in ["FLY_API_HOSTNAME", "FLY_API_TOKEN"] {
+        let error = FlyConfig::from_lookup(|name| match name {
+            "FLY_API_HOSTNAME" if variable == name => Some(not_utf8()),
+            "FLY_API_HOSTNAME" => Some("http://127.0.0.1:4280".into()),
+            _ if variable == name => Some(not_utf8()),
+            _ => None,
+        })
+        .unwrap_err();
+        assert!(matches!(error, FlyError::Config { .. }), "{error:?}");
+        assert!(
+            error
+                .to_string()
+                .contains(&format!("{variable} is not valid UTF-8")),
+            "{error}"
+        );
+    }
+}
