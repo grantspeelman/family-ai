@@ -7,8 +7,16 @@ db-urls = ["https://github.com/RustSec/advisory-db"]
 yanked = "deny"
 unmaintained = "all"
 unsound = "all"
-# No advisory or yanked-crate exceptions. Any future ignore needs a reason.
-ignore = []
+# Every ignore needs a reason. Remove each one as soon as a fix can be adopted.
+ignore = [
+    # Bundled SQLite before 3.54.0 can return uninitialized memory when it opens
+    # a database whose -wal file has a different page size. The fix needs
+    # libsqlite3-sys >= 0.39, but sqlx 0.8 pins 0.30 and sqlx 0.9 allows only
+    # < 0.38. Both apps open only database files they create and write
+    # themselves, never files from a less trusted party, so the attack needs
+    # write access to the app's own data. Drop this once sqlx allows >= 0.39.
+    { id = "RUSTSEC-2026-0459", reason = "fix not reachable through sqlx; apps open only their own database files" },
+]
 
 [licenses]
 confidence-threshold = 0.93
