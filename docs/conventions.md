@@ -60,7 +60,7 @@ Rust tests normally live in each crate's `tests/` directory. These are integrati
 - **Name files after the behaviour they cover** (today `family-app/tests/health.rs` and `registry/tests/api.rs`), not after source modules. There is no one-to-one mapping between `src/` and `tests/` files.
 - **Shared helpers go in `tests/common/mod.rs`.** Cargo does not build that as its own test crate; each test file that needs it declares `mod common;`.
 - **Don't test private internals from `tests/`.** If something can only be tested by reaching inside, test it through its public effects instead. Making an item `pub` just for a test is a design choice; make it deliberately.
-- **Unit tests are the exception.** A `#[cfg(test)]` module inside the source file is for private logic that is hard to reach through the public API. None exist yet.
+- **Unit tests are the exception.** A `#[cfg(test)]` module inside the source file is for private logic that is hard to reach through the public API. Today `family-app/src/notes.rs` and `registry/src/accounts.rs` have one, for pool and query failures that the public API cannot trigger.
 
 ## Workflow safety
 

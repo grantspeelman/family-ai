@@ -105,6 +105,6 @@ fn pool(path: &Path) -> Result<Pool, BoxError> {
 }
 
 /// A query's closure panicked or was cancelled on the blocking thread.
-pub fn interact_error(err: InteractError) -> BoxError {
+pub(crate) fn interact_error(err: InteractError) -> BoxError {
     format!("database task failed: {err}").into()
 }

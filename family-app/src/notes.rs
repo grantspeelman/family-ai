@@ -85,12 +85,30 @@ pub async fn read(State(db): State<Pool>, Path(id): Path<i64>) -> Result<Respons
 mod tests {
     use super::*;
 
+    /// A fresh directory under the system temp dir, removed on drop, so a
+    /// failing test leaves nothing behind.
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("family-app-unit-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).unwrap();
+            TempDir(path)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[tokio::test]
     async fn a_panicking_query_is_a_generic_500() {
-        let dir =
-            std::env::temp_dir().join(format!("family-app-unit-panic-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let pool = db::open(&dir).await.unwrap();
+        let dir = TempDir::new("panic");
+        let pool = db::open(&dir.0).await.unwrap();
 
         let err = run(&pool, |_| -> QueryResult<()> { panic!("query bug") })
             .await
@@ -103,6 +121,5 @@ mod tests {
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         pool.close();
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
