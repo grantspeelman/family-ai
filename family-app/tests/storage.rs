@@ -5,7 +5,9 @@ mod common;
 
 use common::{TempDir, with_conn};
 use diesel::{
-    QueryableByName, RunQueryDsl, sql_query,
+    Connection, QueryableByName, RunQueryDsl, SqliteConnection,
+    connection::SimpleConnection,
+    sql_query,
     sql_types::{BigInt, Nullable, Text},
 };
 use diesel_migrations::MigrationHarness;
@@ -232,4 +234,45 @@ async fn a_data_dir_path_that_is_not_utf8_is_an_open_error_naming_it() {
 
     assert!(matches!(err, db::Error::Open(..)), "got {err:?}");
     assert!(err.to_string().starts_with("cannot open "), "{err}");
+}
+
+#[tokio::test]
+async fn a_database_file_that_cannot_be_opened_is_an_open_error_naming_it() {
+    let dir = TempDir::new("unopenable");
+    // A directory where the database file should be, so no connection opens.
+    let path = dir.path().join("family.db");
+    std::fs::create_dir(&path).unwrap();
+
+    let Err(err) = db::open(dir.path()).await else {
+        panic!("a directory opened as a database");
+    };
+
+    assert!(matches!(err, db::Error::Open(..)), "got {err:?}");
+    let text = err.to_string();
+    assert!(
+        text.starts_with(&format!("cannot open {}: ", path.display())),
+        "{text}"
+    );
+}
+
+#[tokio::test]
+async fn a_migration_that_fails_is_a_migrate_error_naming_the_file() {
+    let dir = TempDir::new("migrate-fails");
+    let path = dir.path().join("family.db");
+    // A `notes` table no migration created, so migration 0001 cannot create it.
+    let mut conn = SqliteConnection::establish(path.to_str().unwrap()).unwrap();
+    conn.batch_execute("CREATE TABLE notes (id INTEGER)")
+        .unwrap();
+    drop(conn);
+
+    let Err(err) = db::open(dir.path()).await else {
+        panic!("the migration applied over an existing table");
+    };
+
+    assert!(matches!(err, db::Error::Migrate(..)), "got {err:?}");
+    let text = err.to_string();
+    assert!(
+        text.starts_with(&format!("cannot migrate {}: ", path.display())),
+        "{text}"
+    );
 }

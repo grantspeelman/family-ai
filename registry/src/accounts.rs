@@ -34,6 +34,7 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 /// Set on every new connection: enforce foreign keys, and wait up to five
 /// seconds for a lock instead of failing at once with `SQLITE_BUSY`.
 const CONNECTION_PRAGMAS: &str = "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;";
+const PRAGMAS_FAILED: &str = "cannot set the connection pragmas";
 const MAX_CONNECTIONS: usize = 10;
 /// How long a query waits for a free or new connection.
 const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -199,7 +200,9 @@ impl AccountStore {
     /// Opens the database at `path`, creating the file if needed, and applies
     /// any pending migrations.
     pub async fn open(path: &Path) -> Result<Self, StoreError> {
-        let store = Self { pool: pool(path)? };
+        let store = Self {
+            pool: pool(path).map_err(StoreError::Database)?,
+        };
         store
             .run_raw(|conn| conn.run_pending_migrations(MIGRATIONS).map(drop))
             .await
@@ -367,25 +370,27 @@ fn failed() -> (
 /// A pool of connections to the SQLite file at `path`, each with
 /// [`CONNECTION_PRAGMAS`] set. Connections open on first use, and opening one
 /// creates the file if it is missing.
-fn pool(path: &Path) -> Result<Pool, StoreError> {
-    let url = path
-        .to_str()
-        .ok_or_else(|| StoreError::Database("the path is not valid UTF-8".into()))?;
-    Pool::builder(Manager::new(url, Runtime::Tokio1))
+fn pool(path: &Path) -> Result<Pool, Box<dyn Error + Send + Sync>> {
+    let url = path.to_str().ok_or("the path is not valid UTF-8")?;
+    let pool = Pool::builder(Manager::new(url, Runtime::Tokio1))
         .max_size(MAX_CONNECTIONS)
         .runtime(Runtime::Tokio1)
         .wait_timeout(Some(ACQUIRE_TIMEOUT))
         .create_timeout(Some(ACQUIRE_TIMEOUT))
         .post_create(Hook::async_fn(|conn, _| {
             Box::pin(async move {
-                conn.interact(|conn| conn.batch_execute(CONNECTION_PRAGMAS))
-                    .await
-                    .map_err(|err| HookError::message(interact_error(err).to_string()))?
-                    .map_err(|err| HookError::message(format!("cannot set pragmas: {err}")))
+                // These pragmas only set flags on a connection that just opened,
+                // so they cannot fail in practice and the error carries no cause.
+                let set = conn
+                    .interact(|conn| conn.batch_execute(CONNECTION_PRAGMAS))
+                    .await;
+                matches!(set, Ok(Ok(())))
+                    .then_some(())
+                    .ok_or(HookError::message(PRAGMAS_FAILED))
             })
         }))
-        .build()
-        .map_err(|error| StoreError::Database(Box::new(error)))
+        .build()?;
+    Ok(pool)
 }
 
 /// The form of an email that uniqueness compares: it folds letter case in any
@@ -433,14 +438,6 @@ mod tests {
         }
     }
 
-    #[derive(QueryableByName, Debug, PartialEq)]
-    struct Settings {
-        #[diesel(sql_type = BigInt)]
-        foreign_keys: i64,
-        #[diesel(sql_type = BigInt)]
-        busy_timeout: i64,
-    }
-
     #[tokio::test]
     async fn every_pooled_connection_enforces_foreign_keys_and_waits_when_busy() {
         let (_removed, store) = fresh("settings").await;
@@ -449,24 +446,18 @@ mod tests {
         let second = store.pool.get().await.unwrap();
 
         for conn in [first, second] {
-            let settings: Settings = conn
+            let settings: (i64, i64) = conn
                 .interact(|conn| {
-                    diesel::sql_query(
-                        "SELECT (SELECT foreign_keys FROM pragma_foreign_keys) AS foreign_keys, \
-                         (SELECT timeout FROM pragma_busy_timeout) AS busy_timeout",
-                    )
+                    diesel::select(diesel::dsl::sql::<(BigInt, BigInt)>(
+                        "(SELECT foreign_keys FROM pragma_foreign_keys), \
+                         (SELECT timeout FROM pragma_busy_timeout)",
+                    ))
                     .get_result(conn)
                 })
                 .await
                 .unwrap()
                 .unwrap();
-            assert_eq!(
-                settings,
-                Settings {
-                    foreign_keys: 1,
-                    busy_timeout: 5000
-                }
-            );
+            assert_eq!(settings, (1, 5000));
         }
     }
 
@@ -490,12 +481,10 @@ mod tests {
             .await
             .unwrap_err();
 
-        let StoreError::Database(inner) = &error else {
-            panic!("got {error:?}");
-        };
+        assert!(matches!(error, StoreError::Database(_)), "got {error:?}");
         assert!(
-            inner.to_string().contains("database task failed"),
-            "{inner}"
+            error.to_string().contains("database task failed"),
+            "{error}"
         );
         // The store still works afterwards.
         assert!(store.get(1).await.unwrap().is_none());

@@ -13,7 +13,7 @@ cargo run -p fly-mock
 
 Build the family app first, or set `FLY_MOCK_FAMILY_APP_BIN` to its binary: `cargo run -p fly-mock` builds only the mock, and without the family app create-Machine returns `500`.
 
-It listens on `127.0.0.1:4280`, the port Fly's own Machines API uses on its private network, so it does not clash with the registry on `8080`. Set `FLY_MOCK_ADDR` to change that, for example `FLY_MOCK_ADDR=0.0.0.0:9001 cargo run -p fly-mock`. It prints the address it is listening on. A port of `0` lets the OS pick a free port. Ctrl-C or SIGTERM stops it with exit code 0. The API has no authentication and each create-Machine starts a process, so keep the mock on a loopback address unless the network is trusted.
+It listens on `127.0.0.1:4280`, the port Fly's own Machines API uses on its private network, so it does not clash with the registry on `8080`. Set `FLY_MOCK_ADDR` to change that, for example `FLY_MOCK_ADDR=0.0.0.0:9001 cargo run -p fly-mock`. It prints the address it is listening on. A port of `0` lets the OS pick a free port. Ctrl-C or SIGTERM stops it with exit code 0. Any startup or server failure logs one line and exits with code 1. The API has no authentication and each create-Machine starts a process, so keep the mock on a loopback address unless the network is trusted.
 
 ## How it is used
 
