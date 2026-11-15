@@ -8,17 +8,8 @@
 use std::{
     collections::BTreeMap,
     ffi::OsString,
-    io::{BufRead, BufReader},
     net::IpAddr,
-    path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicU32, Ordering},
-        mpsc,
-    },
-    thread,
-    time::{Duration, Instant},
+    sync::{Arc, Mutex},
 };
 
 use axum::{
@@ -35,93 +26,11 @@ use registry::fly::{
 };
 use serde_json::{Value, json};
 
+mod common;
+
 const TOKEN: &str = "test-token-abc123";
-const LISTENING: &str = "fly-mock: listening on ";
-/// Long enough for `cargo run` to build the mock on a cold cache.
-const MOCK_START_TIMEOUT: Duration = Duration::from_secs(300);
-const MOCK_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MACHINE_BODY: &str = r#"{"id":"m1","name":"n","state":"created","region":"r",
     "private_ip":"fdaa::1","config":{"image":"i"}}"#;
-
-/// A running `fly-mock` process, killed on drop.
-struct Mock {
-    child: Child,
-    base_url: String,
-    data_dir: PathBuf,
-}
-
-impl Mock {
-    fn start() -> Self {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let built = Command::new(&cargo)
-            .args(["build", "--quiet", "--locked", "-p", "family-app"])
-            .current_dir(manifest_dir)
-            .status()
-            .expect("cannot run cargo");
-        assert!(built.success(), "cannot build family-app");
-        let data_dir = std::env::temp_dir().join(format!(
-            "registry-fly-mock-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        let mut child = Command::new(cargo)
-            .args(["run", "--quiet", "--locked", "-p", "fly-mock"])
-            .current_dir(manifest_dir)
-            .env("FLY_MOCK_ADDR", "127.0.0.1:0")
-            .env("FLY_MOCK_DATA_DIR", &data_dir)
-            // Not 8080, so a server on this host's wildcard address can't block it.
-            .env("FLY_MOCK_MACHINE_PORT", "18082")
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("cannot run cargo");
-        let stderr = child.stderr.take().unwrap();
-        let (addr_tx, addr_rx) = mpsc::channel();
-        // Keep reading until the process exits, so stderr never fills up.
-        thread::spawn(move || {
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                match line.strip_prefix(LISTENING) {
-                    Some(addr) => {
-                        let _ = addr_tx.send(addr.to_owned());
-                    }
-                    // Shows why, if cargo cannot build or run the mock.
-                    None => eprintln!("{line}"),
-                }
-            }
-        });
-        let addr = addr_rx
-            .recv_timeout(MOCK_START_TIMEOUT)
-            .expect("fly-mock did not start");
-        Self {
-            child,
-            base_url: format!("http://{addr}"),
-            data_dir,
-        }
-    }
-
-    fn client(&self) -> FlyClient {
-        client(&self.base_url, None)
-    }
-}
-
-impl Drop for Mock {
-    fn drop(&mut self) {
-        // `cargo run` replaces itself with the mock, so this signals the mock.
-        // `kill` through the shell, as a builtin: slim images have no program.
-        let _ = Command::new("sh")
-            .args(["-c", r#"kill "$1""#, "sh", &self.child.id().to_string()])
-            .status();
-        let deadline = Instant::now() + MOCK_STOP_TIMEOUT;
-        while matches!(self.child.try_wait(), Ok(None)) && Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(20));
-        }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        let _ = std::fs::remove_dir_all(&self.data_dir);
-    }
-}
 
 fn client(base_url: &str, token: Option<&str>) -> FlyClient {
     let config = FlyConfig::new(base_url, token.map(str::to_owned)).unwrap();
@@ -215,8 +124,8 @@ fn assert_not_found_with_message(error: FlyError) {
 
 #[tokio::test]
 async fn creates_an_app_a_volume_and_a_machine_on_the_mock() {
-    let mock = Mock::start();
-    let fly = mock.client();
+    let mock = common::Mock::start();
+    let fly = client(&mock.base_url, None);
 
     fly.create_app("fam-1", "personal").await.unwrap();
     let volume = fly.create_volume("fam-1", &volume_request()).await.unwrap();
@@ -239,8 +148,8 @@ async fn creates_an_app_a_volume_and_a_machine_on_the_mock() {
 
 #[tokio::test]
 async fn an_unknown_app_or_volume_on_the_mock_is_not_found() {
-    let mock = Mock::start();
-    let fly = mock.client();
+    let mock = common::Mock::start();
+    let fly = client(&mock.base_url, None);
 
     let error = fly
         .create_volume("nope", &volume_request())
@@ -261,8 +170,8 @@ async fn an_unknown_app_or_volume_on_the_mock_is_not_found() {
 
 #[tokio::test]
 async fn a_taken_app_name_on_the_mock_is_an_api_error() {
-    let mock = Mock::start();
-    let fly = mock.client();
+    let mock = common::Mock::start();
+    let fly = client(&mock.base_url, None);
 
     fly.create_app("fam-1", "personal").await.unwrap();
     match fly.create_app("fam-1", "personal").await.unwrap_err() {

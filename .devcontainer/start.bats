@@ -132,11 +132,10 @@ copy_checkout() {
     [ ! -e "$SHIMS/ssh-add.log" ]
 }
 
-HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude|--codex | -- command [args...]]
+HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude | -- command [args...]]
   --rebuild  git pull --ff-only, then rebuild the image from scratch (also how Claude Code gets upgraded)
   --docker   privileged mode with nested Docker; see compose.docker.yml first
   --claude   run Claude Code directly instead of a shell (tells herdr it'"'"'s an agent)
-  --codex    run Codex directly instead of a shell (tells herdr it'"'"'s an agent)
   -- command [args...]  run the given command inside the container'
 
 @test "--help prints the usage and flag list on stdout, exits 0, touches nothing" {
@@ -204,7 +203,7 @@ HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude|--codex | -- command
     no_docker_calls
 }
 
-# ── command launch (-- command, --claude, --codex) ───────────────────────────
+# ── command launch (-- command, --claude) ────────────────────────────────────
 # The default shell (no arguments) ends in "exec --user vscode app bash" and is
 # covered under "compose command line" below.
 
@@ -236,23 +235,6 @@ HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude|--codex | -- command
     [ "$(last_agent)" = "HERDR_AGENT=unset" ]
 }
 
-@test "-- codex resume sets HERDR_AGENT=codex" {
-    start -- codex resume
-    [ "$status" -eq 0 ]
-    last_argv
-    [ "${LAST[*]: -3}" = "app codex resume" ]
-    [ "$(last_agent)" = "HERDR_AGENT=codex" ]
-}
-
-@test "--codex runs codex and sets HERDR_AGENT=codex" {
-    start --codex
-    [ "$status" -eq 0 ]
-    last_argv
-    [ "${LAST[-2]}" = app ]
-    [ "${LAST[-1]}" = codex ]
-    [ "$(last_agent)" = "HERDR_AGENT=codex" ]
-}
-
 @test "--claude runs claude and sets HERDR_AGENT=claude" {
     start --claude
     [ "$status" -eq 0 ]
@@ -260,13 +242,6 @@ HELP_TEXT='Usage: start.sh [--rebuild] [--docker] [--claude|--codex | -- command
     [ "${LAST[-2]}" = app ]
     [ "${LAST[-1]}" = claude ]
     [ "$(last_agent)" = "HERDR_AGENT=claude" ]
-}
-
-@test "--claude --codex fails with exit 64 before docker" {
-    start --claude --codex
-    [ "$status" -eq 64 ]
-    [[ "$output" == *"mutually exclusive"* ]]
-    no_docker_calls
 }
 
 @test "a bare -- with no command fails with exit 64 before docker" {

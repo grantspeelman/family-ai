@@ -6,11 +6,17 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use diesel::{prelude::*, sqlite::Sqlite};
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+
+use crate::{
+    db::{self, BoxError, Pool},
+    schema::notes,
+};
 
 /// A row of the `notes` table, as stored.
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize, Queryable, Selectable)]
+#[diesel(table_name = notes, check_for_backend(Sqlite))]
 pub struct Note {
     id: i64,
     body: String,
@@ -24,13 +30,8 @@ pub struct NewNote {
 
 /// A database failure. The details go to the server's log and never into the
 /// response, because they can hold SQL and file paths.
-pub struct DbError(sqlx::Error);
-
-impl From<sqlx::Error> for DbError {
-    fn from(err: sqlx::Error) -> Self {
-        DbError(err)
-    }
-}
+#[derive(Debug)]
+pub struct DbError(BoxError);
 
 impl IntoResponse for DbError {
     fn into_response(self) -> Response {
@@ -39,24 +40,86 @@ impl IntoResponse for DbError {
     }
 }
 
+/// Runs `query` on a pooled connection, off the async runtime's threads.
+async fn run<T: Send + 'static>(
+    pool: &Pool,
+    query: impl FnOnce(&mut SqliteConnection) -> QueryResult<T> + Send + 'static,
+) -> Result<T, DbError> {
+    let conn = pool.get().await.map_err(|err| DbError(err.into()))?;
+    match conn.interact(query).await {
+        Ok(result) => result.map_err(|err| DbError(err.into())),
+        Err(err) => Err(DbError(db::interact_error(err))),
+    }
+}
+
 pub async fn create(
-    State(db): State<SqlitePool>,
+    State(db): State<Pool>,
     Json(new): Json<NewNote>,
 ) -> Result<(StatusCode, Json<Note>), DbError> {
-    let note = sqlx::query_as("INSERT INTO notes (body) VALUES (?) RETURNING id, body, created_at")
-        .bind(new.body)
-        .fetch_one(&db)
-        .await?;
+    let note = run(&db, move |conn| {
+        diesel::insert_into(notes::table)
+            .values(notes::body.eq(new.body))
+            .returning(Note::as_returning())
+            .get_result(conn)
+    })
+    .await?;
     Ok((StatusCode::CREATED, Json(note)))
 }
 
-pub async fn read(State(db): State<SqlitePool>, Path(id): Path<i64>) -> Result<Response, DbError> {
-    let note: Option<Note> = sqlx::query_as("SELECT id, body, created_at FROM notes WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&db)
-        .await?;
+pub async fn read(State(db): State<Pool>, Path(id): Path<i64>) -> Result<Response, DbError> {
+    let note = run(&db, move |conn| {
+        notes::table
+            .find(id)
+            .select(Note::as_select())
+            .first(conn)
+            .optional()
+    })
+    .await?;
     Ok(match note {
         Some(note) => Json(note).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A fresh directory under the system temp dir, removed on drop, so a
+    /// failing test leaves nothing behind.
+    struct TempDir(std::path::PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("family-app-unit-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).unwrap();
+            TempDir(path)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_panicking_query_is_a_generic_500() {
+        let dir = TempDir::new("panic");
+        let pool = db::open(&dir.0).await.unwrap();
+
+        let err = run(&pool, |_| -> QueryResult<()> { panic!("query bug") })
+            .await
+            .unwrap_err();
+
+        assert!(
+            err.0.to_string().contains("database task failed"),
+            "{err:?}"
+        );
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        pool.close();
+    }
 }

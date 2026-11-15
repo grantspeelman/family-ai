@@ -36,6 +36,11 @@ jobs:
             -f .devcontainer/compose.docker.yml \
             config --quiet
 
+      # registry/Dockerfile, the workspace's rust-version and the dev container each
+      # name the Rust version, because no one place can serve all three.
+      - name: Rust version pins match
+        run: .devcontainer/rust-version-check.sh
+
       - name: Build image
         run: docker build -f .devcontainer/Dockerfile -t "$IMAGE" .
 
@@ -73,7 +78,7 @@ jobs:
 
       # cargo fmt and clippy on the whole Cargo workspace, the same commands as the
       # pre-commit hook's 2-lint step, in the image just built: the dev container's
-      # Rust 1.93 with clippy and rustfmt, so no third-party action sets up Rust.
+      # rustup-managed Rust with clippy and rustfmt, so no third-party action sets up Rust.
       # No -p flags or paths, so a crate added to the workspace's `members` is
       # covered with no change here. Run as the checkout's owner so target/ is
       # writable and owned by the runner.
@@ -261,7 +266,8 @@ jobs:
     timeout-minutes: 25
     env:
       REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
-      # The asset digest published on the release page.
+      # The asset digest published on the release page. Bump the version together
+      # with CARGO_LLVM_COV_VERSION in .devcontainer/Dockerfile.
       CARGO_LLVM_COV_VERSION: 0.9.1
       CARGO_LLVM_COV_SHA256: 3fca950394a3c49457657c158b1619cec8dfd2647ae5b48746734c0ab969a522
       # Minimum workspace line coverage, in percent. Deliberately generous: it

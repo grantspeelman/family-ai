@@ -27,10 +27,9 @@ updates:
       prefix: "devcontainer"
 
   # The registry app image. Only the `FROM` lines of registry/Dockerfile are updated.
-  # The Rust image stays on the dev container's Rust (1.93 from the Ubuntu archive)
-  # and the crate's `rust-version`; bump the three together by hand. The tag
-  # `1.93-slim-trixie` floats across patch releases, which arrive on rebuild, so
-  # Dependabot proposes no Rust image bumps. The Debian runtime image still gets PRs.
+  # The Rust image stays on the dev container's RUST_VERSION and the workspace's
+  # `rust-version`; bump the three together by hand. The image's tag floats across
+  # patch releases, which arrive on rebuild, so Dependabot proposes no Rust image bumps. The Debian runtime image still gets PRs.
   - package-ecosystem: "docker"
     directory: "/registry"
     schedule:

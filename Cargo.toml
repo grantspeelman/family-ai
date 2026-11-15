@@ -8,4 +8,6 @@ resolver = "3"
 [workspace.package]
 edition = "2024"
 license = "AGPL-3.0-only"
+# Bump together with RUST_VERSION in .devcontainer/Dockerfile and the rust tag in
+# registry/Dockerfile; .devcontainer/rust-version-check.sh fails CI if they differ.
 rust-version = "1.93"

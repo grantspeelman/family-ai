@@ -34,12 +34,12 @@ Any other path returns `404`.
 
 ## Machines
 
-Create-Machine starts the family app binary as a child process and answers once the app is healthy. `config.image` and `config.env` are ignored: every Machine runs the family app with the mock's own environment, plus `FAMILY_APP_ADDR` and `FAMILY_APP_DATA_DIR`, described below. There are no containers or Firecracker.
+Create-Machine starts the family app binary as a child process and answers once the app is healthy. `config.image` and `config.env` are ignored: every Machine runs the family app with a cleared environment holding only `FAMILY_APP_ADDR` and `FAMILY_APP_DATA_DIR`, described below, plus `LLVM_PROFILE_FILE` and `RUST_BACKTRACE` when set on the mock. There are no containers or Firecracker.
 
 | Variable | Default | What |
 | --- | --- | --- |
 | `FLY_MOCK_ADDR` | `127.0.0.1:4280` | The address the mock itself listens on. |
-| `FLY_MOCK_FAMILY_APP_BIN` | `family-app` next to the mock's executable | The family app binary. `target/debug/fly-mock` finds `target/debug/family-app`. Build it first with `cargo build -p family-app`, or set this variable. |
+| `FLY_MOCK_FAMILY_APP_BIN` | `family-app` next to the mock's executable | The family app binary. `target/debug/fly-mock` finds `target/debug/family-app`. Build it first with `cargo build -p family-app`, or set this variable. The value is a path: a bare name is not looked up on `PATH`, because the child starts with a cleared environment. |
 | `FLY_MOCK_DATA_DIR` | A new directory under the system temp directory | The data root, which holds the volume directories. |
 | `FLY_MOCK_MACHINE_PORT` | `8080` | The port of every Machine. A value that is not a port from 1 to 65535 stops the mock at startup. |
 
@@ -87,7 +87,7 @@ curl -s -XPOST http://127.0.0.1:4280/v1/apps/fam-1/machines -H 'content-type: ap
 
 ## Contract
 
-`tests/fixtures/openapi.json` is a snapshot of Fly's Machines OpenAPI spec (OpenAPI 3.1.0), fetched from <https://docs.fly.io/api/machines/openapi.json> on 2026-11-01. `tests/machines_api.rs` uses the `jsonschema` crate to check requests and responses against the spec's schema for each path, method and status. `$ref`s are resolved against the whole spec. Responses with a status the spec does not list are checked against `ErrorResponse`. To refresh the snapshot, download the file again, update the date here, and run the tests.
+`tests/fixtures/openapi.json` is a snapshot of Fly's Machines OpenAPI spec (OpenAPI 3.1.0), fetched from <https://docs.fly.io/api/machines/openapi.json> on 2026-11-01. `tests/machines_api.rs` uses the `jsonschema` crate to check requests and responses against the spec's schema for each path, method and status. `$ref`s are resolved against the whole spec. Responses with a status the spec does not list are checked against `ErrorResponse`. The registry reads the same snapshot in `registry/tests/fly_contract.rs` to check what its Fly client sends and decodes. To refresh the snapshot, download the file again, update the date here, and run the tests here and `cargo test --locked -p registry --test fly_contract`.
 
 ## Tests
 

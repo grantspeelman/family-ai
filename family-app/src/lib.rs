@@ -2,16 +2,16 @@
 
 pub mod db;
 mod notes;
+mod schema;
 
 use axum::{
     Router,
     routing::{get, post},
 };
-use sqlx::SqlitePool;
 
 /// Builds the HTTP app on the open database: `GET /healthz`, `POST /notes`
 /// and `GET /notes/{id}`.
-pub fn app(db: SqlitePool) -> Router {
+pub fn app(db: db::Pool) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/notes", post(notes::create))
