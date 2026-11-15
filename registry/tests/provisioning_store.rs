@@ -3,44 +3,32 @@
 
 use std::path::Path;
 
-use registry::accounts::{AccountStore, Status};
-use sqlx::{Connection, SqliteConnection, migrate::Migrator, sqlite::SqliteConnectOptions};
+use diesel::{
+    Connection, RunQueryDsl, SqliteConnection, sql_query,
+    sql_types::{BigInt, Text},
+};
+use diesel_migrations::MigrationHarness;
+use registry::accounts::{AccountStore, MIGRATIONS, Status};
 
 mod common;
 
-async fn connect(path: &Path) -> SqliteConnection {
-    let options = SqliteConnectOptions::new()
-        .filename(path)
-        .create_if_missing(true);
-    SqliteConnection::connect_with(&options).await.unwrap()
+fn connect(path: &Path) -> SqliteConnection {
+    SqliteConnection::establish(path.to_str().unwrap()).unwrap()
 }
 
 #[tokio::test]
 async fn a_row_from_before_the_migration_reads_back_failed_without_an_address() {
     let path = common::fresh_db("store-old-row");
-    let old = std::env::temp_dir().join(format!("registry-old-migrations-{}", std::process::id()));
-    std::fs::create_dir_all(&old).unwrap();
-    let first = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/migrations/0001_create_accounts.sql"
-    );
-    std::fs::copy(first, old.join("0001_create_accounts.sql")).unwrap();
-    let mut connection = connect(&path).await;
-    Migrator::new(old.as_path())
-        .await
-        .unwrap()
-        .run(&mut connection)
-        .await
-        .unwrap();
-    sqlx::query(
+    let mut connection = connect(&path);
+    // Only the first migration, as a database from before provisioning had.
+    connection.run_next_migration(MIGRATIONS).unwrap();
+    sql_query(
         "INSERT INTO accounts (email, email_key, family_name) \
          VALUES ('ana@example.com', 'ana@example.com', 'Silva')",
     )
     .execute(&mut connection)
-    .await
     .unwrap();
-    connection.close().await.unwrap();
-    std::fs::remove_dir_all(&old).unwrap();
+    drop(connection);
 
     let store = AccountStore::open(&path).await.unwrap();
 
@@ -55,20 +43,18 @@ async fn a_status_outside_the_three_values_cannot_be_stored() {
     let path = common::fresh_db("store-bad-status");
     let store = AccountStore::open(&path).await.unwrap();
     let account = store.create("ana@example.com", "Silva").await.unwrap();
-    let mut connection = connect(&path).await;
+    let mut connection = connect(&path);
 
     for status in ["done", "READY", ""] {
-        let result = sqlx::query("UPDATE accounts SET status = ? WHERE id = ?")
-            .bind(status)
-            .bind(account.id)
-            .execute(&mut connection)
-            .await;
+        let result = sql_query("UPDATE accounts SET status = ? WHERE id = ?")
+            .bind::<Text, _>(status)
+            .bind::<BigInt, _>(account.id)
+            .execute(&mut connection);
         assert!(result.is_err(), "status {status:?} was stored");
     }
-    let result = sqlx::query("UPDATE accounts SET address = 'http://x' WHERE id = ?")
-        .bind(account.id)
-        .execute(&mut connection)
-        .await;
+    let result = sql_query("UPDATE accounts SET address = 'http://x' WHERE id = ?")
+        .bind::<BigInt, _>(account.id)
+        .execute(&mut connection);
     assert!(result.is_err(), "an address was stored while provisioning");
 }
 

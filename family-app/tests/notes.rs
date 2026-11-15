@@ -8,14 +8,17 @@ use axum::{
     body::Body,
     http::{HeaderMap, Request, StatusCode, header},
 };
-use common::TempDir;
-use family_app::db;
+use common::{TempDir, with_conn};
+use diesel::{
+    QueryableByName, RunQueryDsl, sql_query,
+    sql_types::{BigInt, Text},
+};
+use family_app::db::{self, Pool};
 use serde_json::{Value, json};
-use sqlx::SqlitePool;
 
 /// A router on a freshly opened database in its own directory. Holding the
 /// directory keeps it alive for the test; it is removed on drop.
-async fn setup(name: &str) -> (TempDir, SqlitePool, Router) {
+async fn setup(name: &str) -> (TempDir, Pool, Router) {
     let dir = TempDir::new(name);
     let pool = db::open(dir.path()).await.unwrap();
     let router = family_app::app(pool.clone());
@@ -46,11 +49,34 @@ fn assert_json(headers: &HeaderMap) {
     assert_eq!(headers[header::CONTENT_TYPE], "application/json");
 }
 
-async fn row_count(pool: &SqlitePool) -> i64 {
-    sqlx::query_scalar("SELECT count(*) FROM notes")
-        .fetch_one(pool)
-        .await
-        .unwrap()
+#[derive(QueryableByName)]
+struct Count {
+    #[diesel(sql_type = BigInt)]
+    count: i64,
+}
+
+#[derive(QueryableByName)]
+struct NoteRow {
+    #[diesel(sql_type = BigInt)]
+    id: i64,
+    #[diesel(sql_type = Text)]
+    body: String,
+    #[diesel(sql_type = Text)]
+    created_at: String,
+}
+
+async fn row_count(pool: &Pool) -> i64 {
+    with_conn(pool, |conn| {
+        sql_query("SELECT count(*) AS count FROM notes")
+            .get_result::<Count>(conn)
+            .unwrap()
+    })
+    .await
+    .count
+}
+
+async fn execute(pool: &Pool, sql: &'static str) {
+    with_conn(pool, move |conn| sql_query(sql).execute(conn).unwrap()).await;
 }
 
 /// Writes a note, asserts the write succeeded, and returns the stored row.
@@ -71,18 +97,20 @@ async fn write_returns_the_row_sqlite_stored() {
     let note = parse(&body);
     assert_eq!(note.as_object().unwrap().len(), 3, "note: {note}");
     assert_eq!(note["body"], "hello");
-    let stored: (i64, String, String) = sqlx::query_as("SELECT id, body, created_at FROM notes")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(note["id"], stored.0);
-    assert_eq!(note["body"], stored.1);
-    assert_eq!(note["created_at"], stored.2);
+    let stored: NoteRow = with_conn(&pool, |conn| {
+        sql_query("SELECT id, body, created_at FROM notes")
+            .get_result(conn)
+            .unwrap()
+    })
+    .await;
+    assert_eq!(note["id"], stored.id);
+    assert_eq!(note["body"], stored.body);
+    assert_eq!(note["created_at"], stored.created_at);
     // YYYY-MM-DD HH:MM:SS
-    let created_at = stored.2.as_bytes();
-    assert_eq!(created_at.len(), 19, "created_at: {}", stored.2);
+    let created_at = stored.created_at.as_bytes();
+    assert_eq!(created_at.len(), 19, "created_at: {}", stored.created_at);
     assert_eq!(created_at[10], b' ');
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
@@ -95,22 +123,19 @@ async fn read_returns_the_written_row() {
     assert_eq!(status, StatusCode::OK);
     assert_json(&headers);
     assert_eq!(parse(&body), note);
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
 async fn read_comes_from_the_database() {
     let (_dir, pool, router) = setup("read-db").await;
     let note = write(&router, "before").await;
-    sqlx::query("UPDATE notes SET body = 'after'")
-        .execute(&pool)
-        .await
-        .unwrap();
+    execute(&pool, "UPDATE notes SET body = 'after'").await;
 
     let (_, _, body) = get(&router, &format!("/notes/{}", note["id"])).await;
 
     assert_eq!(parse(&body)["body"], "after");
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
@@ -124,7 +149,7 @@ async fn two_writes_get_different_ids_and_read_back_their_own_body() {
         let (_, _, body) = get(&router, &format!("/notes/{}", note["id"])).await;
         assert_eq!(parse(&body), note);
     }
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
@@ -137,7 +162,7 @@ async fn empty_and_awkward_bodies_round_trip_unchanged() {
         assert_eq!(parse(&body)["body"], text);
     }
     assert_eq!(row_count(&pool).await, 3);
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
@@ -145,7 +170,7 @@ async fn id_with_no_row_is_not_found() {
     let (_dir, pool, router) = setup("not-found").await;
     let (status, _, _) = get(&router, "/notes/1").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
@@ -162,7 +187,7 @@ async fn bad_write_is_a_client_error_and_stores_nothing() {
     assert!(status.is_client_error(), "no content type: {status}");
 
     assert_eq!(row_count(&pool).await, 0);
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
@@ -172,7 +197,7 @@ async fn non_integer_id_is_a_client_error() {
         let (status, _, _) = get(&router, path).await;
         assert!(status.is_client_error(), "{path}: {status}");
     }
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
@@ -180,7 +205,7 @@ async fn note_survives_reopening_the_data_directory() {
     let (dir, pool, router) = setup("restart").await;
     let note = write(&router, "kept").await;
     drop(router);
-    pool.close().await;
+    pool.close();
 
     let pool = db::open(dir.path()).await.unwrap();
     let router = family_app::app(pool.clone());
@@ -188,16 +213,13 @@ async fn note_survives_reopening_the_data_directory() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(parse(&body), note);
-    pool.close().await;
+    pool.close();
 }
 
 #[tokio::test]
 async fn database_errors_are_generic_500s() {
     let (_dir, pool, router) = setup("db-error").await;
-    sqlx::query("DROP TABLE notes")
-        .execute(&pool)
-        .await
-        .unwrap();
+    execute(&pool, "DROP TABLE notes").await;
 
     let created = post(&router, r#"{"body": "hello"}"#).await;
     let read = get(&router, "/notes/1").await;
@@ -206,5 +228,19 @@ async fn database_errors_are_generic_500s() {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(body, b"internal server error");
     }
-    pool.close().await;
+    pool.close();
+}
+
+#[tokio::test]
+async fn a_closed_pool_gives_generic_500s() {
+    let (_dir, pool, router) = setup("closed-pool").await;
+    pool.close();
+
+    let created = post(&router, r#"{"body": "hello"}"#).await;
+    let read = get(&router, "/notes/1").await;
+
+    for (status, _, body) in [created, read] {
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(body, b"internal server error");
+    }
 }

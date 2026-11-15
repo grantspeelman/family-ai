@@ -10,7 +10,7 @@ From the repo root:
 REGISTRY_DB_PATH=target/registry.db cargo run -p registry
 ```
 
-`REGISTRY_DB_PATH` is required, including for `cargo run`: it is the SQLite database file, created if it does not exist. If it is unset or empty, or the database cannot be opened, the registry prints the cause to stderr and exits non-zero before it starts listening.
+`REGISTRY_DB_PATH` is required, including for `cargo run`: it is the SQLite database file, created if it does not exist. If it is unset or empty, or the database cannot be opened, the registry prints the cause to stderr and exits non-zero before it starts listening. Before listening it also applies pending migrations from `migrations/` with Diesel; `family-app/README.md` explains the migration layout and rules, which are the same here.
 
 Without `FLY_API_HOSTNAME`, the registry starts but logs that provisioning is disabled, and `createAccount` returns `PROVISIONING_UNAVAILABLE`. See [Provisioning](#provisioning) for running it against the Fly mock.
 

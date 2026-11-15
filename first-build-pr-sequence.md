@@ -63,7 +63,7 @@ PRs 2–9 are queued on the factory board as issues #45–#62. The Flutter skele
 - clippy + rustfmt and `cargo-deny` are strict gates and block feature work. Coverage, duplication and complexity fail only past generous thresholds and run alongside feature work. Tighten them later with real data.
 - Plumbing is split from logic. Crate skeletons, dependency additions and CI wiring land in small PRs a human skims and merges. Each crate skeleton also widens the factory's allowed paths for that crate's `src/`, `tests/` and README, plus `migrations/*.sql` for apps with a database, so follow-up jobs stay inside them.
 - API contracts and data handling stay in small PRs that get a close human read. The approver escalates them.
-- One SQLite stack for the workspace: `sqlx`, with migrations as `.sql` files under each app's `migrations/`.
+- One SQLite stack for the workspace: Diesel with `diesel_migrations` and a `deadpool-diesel` pool, on bundled SQLite, with each migration as `up.sql` and `down.sql` under each app's `migrations/`. It replaced `sqlx`, which pinned an old bundled SQLite and lagged on the fix for RUSTSEC-2026-0459. Diesel also checks queries against `schema.rs` at compile time.
 - Accounts take an email and a family name. The email is unique, ignoring letter case. Keycloak is the planned identity provider and comes later; the account store is shaped so its subject id can take over the identity. Until auth exists, the polling query `accountStatus` returns only status and address, never personal data.
 - The front end comes before the end-to-end suite. #84 is blocked by #83, #60 and #61. #85 is blocked by #84.
 - The e2e setup (#53) is blocked by #84 and will be re-specced around the Flutter app. It is not done. #62 follows #53.

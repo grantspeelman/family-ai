@@ -1,6 +1,6 @@
 # family-app
 
-The family app: the Rust service that will run on each family's Machine, with SQLite on that Machine's volume. So far it has a health check, its SQLite database (`sqlx`, bundled), and two endpoints that write a note to that database and read it back.
+The family app: the Rust service that will run on each family's Machine, with SQLite on that Machine's volume. So far it has a health check, its SQLite database (Diesel with `diesel_migrations` and a `deadpool-diesel` connection pool, SQLite bundled), and two endpoints that write a note to that database and read it back.
 
 ## Run
 
@@ -75,13 +75,17 @@ Use the `id` from the `POST` response in place of `/notes/1`.
 
 ## Database
 
-On start, before it listens, the app opens or creates `family.db` in `FAMILY_APP_DATA_DIR` and applies pending migrations (`family_app::db::open`). Migrations run through sqlx's migrator. Each one runs once, in its own transaction, and sqlx records it in the `_sqlx_migrations` table. A restart reuses the same file and data.
+On start, before it listens, the app opens or creates `family.db` in `FAMILY_APP_DATA_DIR` and applies pending migrations (`family_app::db::open`). Migrations run through `diesel_migrations`. Each one runs once, in its own transaction, and Diesel records its version in the `__diesel_schema_migrations` table. A restart reuses the same file and data. Every pooled connection turns on foreign keys and waits up to 5 seconds for a locked database (`busy_timeout`).
+
+Nothing was deployed while the app used sqlx, so a database with sqlx's `_sqlx_migrations` table is not supported: delete the file and let the app create it again.
 
 ### Adding a migration
 
-Add a file to `migrations/` named with the next number and a short description, for example `migrations/0002_add_tags.sql`. `sqlx::migrate!` embeds the files at compile time, and `build.rs` makes Cargo rebuild when `migrations/` changes. Never edit or rename a migration that has shipped: sqlx stores each one's checksum and refuses to start if a file has changed.
+Add a directory to `migrations/` named with the next number and a short description, holding `up.sql` and `down.sql`, for example `migrations/0002_add_tags/up.sql`. The number is the version Diesel records, and migrations run in its order. `embed_migrations!` embeds the files at compile time, and `build.rs` makes Cargo rebuild when `migrations/` changes. Update `src/schema.rs` (`diesel::table!`) to match, so the typed queries see the new schema.
 
-Migration 1 (`migrations/0001_create_notes.sql`) creates the one table:
+Never edit or rename a migration that has shipped. Diesel keeps no checksum, so an edited migration is silently skipped on databases that already ran it, and a renamed one runs again.
+
+Migration 1 (`migrations/0001_create_notes/up.sql`) creates the one table:
 
 ```sql
 notes(id INTEGER PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)
