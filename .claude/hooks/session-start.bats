@@ -58,3 +58,13 @@ setup() {
     [ "${#calls[@]}" -eq 1 ]
     [ "${calls[0]}" = "$PROJECT cargo fetch --locked" ]
 }
+
+@test "settings.json command works when the project path has a space" {
+    project="$BATS_TEST_TMPDIR/my project"
+    mkdir -p "$project/.claude/hooks"
+    cp "$SCRIPT" "$project/.claude/hooks/session-start.sh"
+    command=$(jq -er '.hooks.SessionStart[0].hooks[0].command' "$REPO_ROOT/.claude/settings.json")
+    CLAUDE_PROJECT_DIR="$project" run sh -c "$command"
+    [ "$status" -eq 0 ]
+    [ ! -s "$CALLS" ]
+}
