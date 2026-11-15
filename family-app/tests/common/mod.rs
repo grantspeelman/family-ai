@@ -10,6 +10,8 @@ use axum::{
     body::Body,
     http::{HeaderMap, Request, StatusCode},
 };
+use diesel::SqliteConnection;
+use family_app::db::Pool;
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
@@ -43,4 +45,12 @@ pub async fn send(router: Router, request: Request<Body>) -> (StatusCode, Header
     let headers = response.headers().clone();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     (status, headers, body.to_vec())
+}
+
+/// Runs `query` on a connection from the app's pool.
+pub async fn with_conn<T: Send + 'static>(
+    pool: &Pool,
+    query: impl FnOnce(&mut SqliteConnection) -> T + Send + 'static,
+) -> T {
+    pool.get().await.unwrap().interact(query).await.unwrap()
 }

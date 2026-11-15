@@ -11,10 +11,14 @@ publish = false
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# SQLite with a bundled libsqlite3, so no system SQLite is needed. The
-# workspace keeps to this one SQLite stack: two crates linking sqlite3 cannot
-# coexist in one Cargo workspace.
-sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio", "migrate", "macros"] }
+deadpool-diesel = { version = "0.7", default-features = false, features = ["rt_tokio_1", "sqlite"] }
+diesel = { version = "2.4", default-features = false, features = ["sqlite", "returning_clauses_for_sqlite_3_35"] }
+diesel_migrations = { version = "2.4", default-features = false, features = ["sqlite"] }
+# Not used directly: `bundled` compiles SQLite into the binary, so no system
+# SQLite is needed, and >= 0.39 brings the SQLite fix for RUSTSEC-2026-0459.
+# Diesel allows libsqlite3-sys < 0.41. Two crates linking sqlite3 cannot
+# coexist in one Cargo workspace, so the workspace keeps to this one stack.
+libsqlite3-sys = { version = "0.40", features = ["bundled"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
 
 [dev-dependencies]

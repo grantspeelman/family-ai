@@ -4,10 +4,12 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode, header},
 };
+use diesel::{
+    Connection, QueryableByName, RunQueryDsl, SqliteConnection, sql_query, sql_types::BigInt,
+};
 use http_body_util::BodyExt;
 use registry::accounts::AccountStore;
 use serde_json::{Value, json};
-use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
 use tower::ServiceExt;
 
@@ -60,12 +62,16 @@ fn assert_error(json: &Value, code: &str, email: &str, family_name: &str) {
 
 /// Counts the rows in the database file directly.
 async fn account_count(path: &Path) -> i64 {
-    let options = SqliteConnectOptions::new().filename(path);
-    let mut connection = SqliteConnection::connect_with(&options).await.unwrap();
-    sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
-        .fetch_one(&mut connection)
-        .await
+    #[derive(QueryableByName)]
+    struct Count {
+        #[diesel(sql_type = BigInt)]
+        count: i64,
+    }
+    let mut connection = SqliteConnection::establish(path.to_str().unwrap()).unwrap();
+    sql_query("SELECT COUNT(*) AS count FROM accounts")
+        .get_result::<Count>(&mut connection)
         .unwrap()
+        .count
 }
 
 #[tokio::test]

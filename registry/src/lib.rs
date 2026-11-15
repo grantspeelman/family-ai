@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod fly;
 pub mod provisioning;
+mod schema;
 
 use accounts::{AccountStore, StoreError};
 use async_graphql::{

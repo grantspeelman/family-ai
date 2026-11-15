@@ -2,8 +2,10 @@
 
 use std::path::PathBuf;
 
+use diesel::{
+    Connection, QueryableByName, RunQueryDsl, SqliteConnection, sql_query, sql_types::Text,
+};
 use registry::accounts::{AccountStore, StoreError};
-use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 
 /// A path no other test uses, with nothing left over from an earlier run.
 fn fresh_db(name: &str) -> PathBuf {
@@ -171,15 +173,16 @@ async fn the_primary_key_is_the_id_not_the_email() {
     let path = fresh_db("primary-key");
     AccountStore::open(&path).await.unwrap();
 
-    let mut connection =
-        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
-            .await
-            .unwrap();
-    let rows = sqlx::query("SELECT name FROM pragma_table_info('accounts') WHERE pk > 0")
-        .fetch_all(&mut connection)
-        .await
+    #[derive(QueryableByName)]
+    struct Name {
+        #[diesel(sql_type = Text)]
+        name: String,
+    }
+    let mut connection = SqliteConnection::establish(path.to_str().unwrap()).unwrap();
+    let rows: Vec<Name> = sql_query("SELECT name FROM pragma_table_info('accounts') WHERE pk > 0")
+        .load(&mut connection)
         .unwrap();
-    let primary_key: Vec<String> = rows.iter().map(|row| row.get("name")).collect();
+    let primary_key: Vec<String> = rows.into_iter().map(|row| row.name).collect();
 
     assert_eq!(primary_key, ["id"]);
 }

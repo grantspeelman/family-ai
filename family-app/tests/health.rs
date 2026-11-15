@@ -12,7 +12,7 @@ async fn send(name: &str, request: Request<Body>) -> (StatusCode, Vec<u8>) {
     let dir = TempDir::new(name);
     let pool = family_app::db::open(dir.path()).await.unwrap();
     let (status, _, body) = common::send(family_app::app(pool.clone()), request).await;
-    pool.close().await;
+    pool.close();
     (status, body)
 }
 

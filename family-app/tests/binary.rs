@@ -15,8 +15,11 @@ use std::{
 };
 
 use common::TempDir;
+use diesel::{
+    Connection, QueryableByName, RunQueryDsl, SqliteConnection, sql_query,
+    sql_types::{BigInt, Text},
+};
 use serde_json::Value;
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 
 const BIN: &str = env!("CARGO_BIN_EXE_family-app");
 const START_TIMEOUT: Duration = Duration::from_secs(10);
@@ -140,16 +143,30 @@ fn request(addr: &str, raw: &str) -> String {
     }
 }
 
-/// Runs `check` against the database file, opened read-only so the check cannot
-/// create or migrate anything itself.
-fn with_read_only_db(path: &Path, check: impl AsyncFnOnce(&SqlitePool)) {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        let options = SqliteConnectOptions::new().filename(path).read_only(true);
-        let pool = SqlitePool::connect_with(options).await.unwrap();
-        check(&pool).await;
-        pool.close().await;
-    });
+#[derive(QueryableByName)]
+struct Count {
+    #[diesel(sql_type = BigInt)]
+    count: i64,
+}
+
+#[derive(QueryableByName)]
+struct Body {
+    #[diesel(sql_type = Text)]
+    body: String,
+}
+
+/// Opens the database file read-only, so the check cannot create or migrate
+/// anything itself.
+fn read_only_db(path: &Path) -> SqliteConnection {
+    SqliteConnection::establish(&format!("file:{}?mode=ro", path.display())).unwrap()
+}
+
+/// Counts the rows `sql` returns from the database file.
+fn count(path: &Path, sql: &str) -> i64 {
+    sql_query(format!("SELECT count(*) AS count FROM ({sql})"))
+        .get_result::<Count>(&mut read_only_db(path))
+        .unwrap()
+        .count
 }
 
 /// The JSON body of a response.
@@ -204,21 +221,10 @@ fn valid_data_dir_serves_healthz_and_creates_notes_table() {
 
     let db_path = dir.path().join("family.db");
     assert!(db_path.is_file());
-    with_read_only_db(&db_path, async |pool| {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'",
-        )
-        .fetch_one(pool)
-        .await
-        .unwrap();
-        assert_eq!(count, 1);
-        let success: bool =
-            sqlx::query_scalar("SELECT success FROM _sqlx_migrations WHERE version = 1")
-                .fetch_one(pool)
-                .await
-                .unwrap();
-        assert!(success);
-    });
+    let notes = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'notes'";
+    assert_eq!(count(&db_path, notes), 1);
+    let applied = "SELECT 1 FROM __diesel_schema_migrations WHERE version = '0001'";
+    assert_eq!(count(&db_path, applied), 1);
 }
 
 #[test]
@@ -252,14 +258,11 @@ fn written_note_reads_back_over_the_socket_and_is_in_family_db() {
     assert_eq!(json_body(&read), note);
 
     // The row is in the data directory's file, not some other database.
-    with_read_only_db(&dir.path().join("family.db"), async |pool| {
-        let body: String = sqlx::query_scalar("SELECT body FROM notes WHERE id = ?")
-            .bind(note["id"].as_i64().unwrap())
-            .fetch_one(pool)
-            .await
-            .unwrap();
-        assert_eq!(body, "over the socket");
-    });
+    let stored: Body = sql_query("SELECT body FROM notes WHERE id = ?")
+        .bind::<BigInt, _>(note["id"].as_i64().unwrap())
+        .get_result(&mut read_only_db(&dir.path().join("family.db")))
+        .unwrap();
+    assert_eq!(stored.body, "over the socket");
 }
 
 #[test]
