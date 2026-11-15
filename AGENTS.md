@@ -64,13 +64,13 @@ Never bypass the hook with `--no-verify`. If it blocks a commit, fix the finding
 
 ### Coverage, locally
 
-The dev container has `cargo-llvm-cov`, so you can run CI's coverage check before pushing:
+New code must keep workspace line coverage at 100%: every line runs under test, with nothing excluded. The `coverage` job in `.github/workflows/devcontainer-ci.yml` fails otherwise. The dev container has `cargo-llvm-cov`, so you can run CI's coverage check before pushing:
 
 ```sh
-cargo llvm-cov --workspace --locked --fail-under-lines <COVERAGE_FLOOR>
+cargo llvm-cov --workspace --locked --fail-under-lines 100
 ```
 
-Use the value of `COVERAGE_FLOOR` in the `coverage` job of `.github/workflows/devcontainer-ci.yml`. The pre-commit hook does not run it.
+The pre-commit hook does not run it.
 
 ### On the PR
 

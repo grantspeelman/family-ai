@@ -1,6 +1,6 @@
 //! The account store, through its public API, on real database files.
 
-use std::path::PathBuf;
+use std::{error::Error, path::PathBuf};
 
 use diesel::{
     Connection, QueryableByName, RunQueryDsl, SqliteConnection, sql_query, sql_types::Text,
@@ -55,6 +55,7 @@ async fn duplicate_email_is_rejected_and_first_account_is_unchanged() {
         .expect_err("a duplicate email must be rejected");
 
     assert!(matches!(error, StoreError::DuplicateEmail), "got {error:?}");
+    assert!(error.source().is_none());
     assert_eq!(store.get(first.id).await.unwrap(), Some(first));
 }
 

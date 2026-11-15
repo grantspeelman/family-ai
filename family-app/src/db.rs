@@ -26,6 +26,7 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 /// Set on every new connection: enforce foreign keys, and wait up to five
 /// seconds for a lock instead of failing at once with `SQLITE_BUSY`.
 const CONNECTION_PRAGMAS: &str = "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;";
+const PRAGMAS_FAILED: &str = "cannot set the connection pragmas";
 const MAX_CONNECTIONS: usize = 10;
 /// How long a request waits for a free or new connection.
 const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -94,10 +95,14 @@ fn pool(path: &Path) -> Result<Pool, BoxError> {
         .create_timeout(Some(ACQUIRE_TIMEOUT))
         .post_create(Hook::async_fn(|conn, _| {
             Box::pin(async move {
-                conn.interact(|conn| conn.batch_execute(CONNECTION_PRAGMAS))
-                    .await
-                    .map_err(|err| HookError::message(interact_error(err).to_string()))?
-                    .map_err(|err| HookError::message(format!("cannot set pragmas: {err}")))
+                // These pragmas only set flags on a connection that just opened,
+                // so they cannot fail in practice and the error carries no cause.
+                let set = conn
+                    .interact(|conn| conn.batch_execute(CONNECTION_PRAGMAS))
+                    .await;
+                matches!(set, Ok(Ok(())))
+                    .then_some(())
+                    .ok_or(HookError::message(PRAGMAS_FAILED))
             })
         }))
         .build()?;

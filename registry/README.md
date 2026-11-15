@@ -14,7 +14,7 @@ REGISTRY_DB_PATH=target/registry.db cargo run -p registry
 
 Without `FLY_API_HOSTNAME`, the registry starts but logs that provisioning is disabled, and `createAccount` returns `PROVISIONING_UNAVAILABLE`. See [Provisioning](#provisioning) for running it against the Fly mock.
 
-It listens on `127.0.0.1:8080`. Set `REGISTRY_ADDR` to change that, for example `REGISTRY_ADDR=0.0.0.0:9000 cargo run -p registry`. Ctrl-C or SIGTERM stops it.
+It listens on `127.0.0.1:8080`. Set `REGISTRY_ADDR` to change that, for example `REGISTRY_ADDR=0.0.0.0:9000 cargo run -p registry`. It logs the address it bound, so a port of `0` shows the port the OS picked. Ctrl-C or SIGTERM stops it with exit code 0. Any startup or server failure logs one line and exits with code 1.
 
 ## Endpoints
 

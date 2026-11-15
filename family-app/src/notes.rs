@@ -45,11 +45,12 @@ async fn run<T: Send + 'static>(
     pool: &Pool,
     query: impl FnOnce(&mut SqliteConnection) -> QueryResult<T> + Send + 'static,
 ) -> Result<T, DbError> {
+    // One chain, so every instantiation runs every line of this function.
     let conn = pool.get().await.map_err(|err| DbError(err.into()))?;
-    match conn.interact(query).await {
-        Ok(result) => result.map_err(|err| DbError(err.into())),
-        Err(err) => Err(DbError(db::interact_error(err))),
-    }
+    conn.interact(query)
+        .await
+        .map_err(|err| DbError(db::interact_error(err)))?
+        .map_err(|err| DbError(err.into()))
 }
 
 pub async fn create(

@@ -11,7 +11,7 @@ FAMILY_APP_DATA_DIR=/tmp/family-data cargo run -p family-app
 
 `FAMILY_APP_DATA_DIR` is required and names the data directory, the mount point of the family's volume. It has no default, and the app does not create the directory, so family data is never written anywhere but the volume. If the variable is unset, the directory is missing, or the database cannot be opened or migrated, the app prints a one-line `family-app:` error to stderr and exits non-zero without serving.
 
-It listens on `127.0.0.1:8080`. Set `FAMILY_APP_ADDR` to listen elsewhere, for example `FAMILY_APP_ADDR=127.0.0.1:9001`. It stops cleanly on Ctrl-C or SIGTERM.
+It listens on `127.0.0.1:8080`. Set `FAMILY_APP_ADDR` to listen elsewhere, for example `FAMILY_APP_ADDR=127.0.0.1:9001`. It logs the address it bound, so a port of `0` shows the port the OS picked. Ctrl-C or SIGTERM stops it with exit code 0. Any startup or server failure logs one line and exits with code 1.
 
 ## Endpoints
 

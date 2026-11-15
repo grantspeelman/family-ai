@@ -55,6 +55,7 @@ async fn a_path_that_is_not_utf8_is_a_database_error() {
     let error = AccountStore::open(&path).await.unwrap_err();
 
     assert!(matches!(error, StoreError::Database(_)), "got {error:?}");
+    assert!(error.source().is_some());
 }
 
 #[tokio::test]

@@ -93,6 +93,10 @@ impl Drop for Server {
     /// Stops the mock with SIGTERM first, so a failing test doesn't leave family
     /// apps running, and falls back to SIGKILL.
     fn drop(&mut self) {
+        // Already reaped, so its pid may belong to another process by now.
+        if matches!(self.child.try_wait(), Ok(Some(_))) {
+            return;
+        }
         let pid = self.child.id().to_string();
         let _ = shell_kill(&["-s", "TERM", &pid]);
         let deadline = Instant::now() + STOP_TIMEOUT;

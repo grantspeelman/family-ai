@@ -8,6 +8,9 @@
 
 # Rust build output
 target/
+# LLVM coverage profiles, which an instrumented binary writes to its working
+# directory when LLVM_PROFILE_FILE is unset
+*.profraw
 
 # Editor and OS noise
 .DS_Store
