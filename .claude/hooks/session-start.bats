@@ -64,7 +64,10 @@ setup() {
     mkdir -p "$project/.claude/hooks"
     cp "$SCRIPT" "$project/.claude/hooks/session-start.sh"
     command=$(jq -er '.hooks.SessionStart[0].hooks[0].command' "$REPO_ROOT/.claude/settings.json")
-    CLAUDE_PROJECT_DIR="$project" run sh -c "$command"
+    CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR="$project" run sh -c "$command"
     [ "$status" -eq 0 ]
-    [ ! -s "$CALLS" ]
+    mapfile -t calls < "$CALLS"
+    [ "${#calls[@]}" -eq 2 ]
+    [ "${calls[0]}" = "$project cargo fetch --locked" ]
+    [ "${calls[1]}" = "$project cargo build --workspace --all-targets --locked" ]
 }
