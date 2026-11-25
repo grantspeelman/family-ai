@@ -97,4 +97,4 @@ notes(id INTEGER PRIMARY KEY, body TEXT NOT NULL, created_at TEXT NOT NULL DEFAU
 cargo test --locked -p family-app
 ```
 
-`tests/health.rs` and `tests/notes.rs` send requests straight into the router, the latter against a real database. `tests/storage.rs` opens databases in fresh temp directories. `tests/binary.rs` starts the built binary and checks its startup errors, `GET /healthz` and a note written and read back over the socket. CI runs them as part of the workspace-wide `cargo test --locked` in the `registry` job.
+`tests/health.rs` and `tests/notes.rs` send requests straight into the router, the latter against a real database. `tests/storage.rs` opens databases in fresh temp directories. `tests/binary.rs` starts the built binary and checks its startup errors, `GET /healthz` and a note written and read back over the socket. CI runs them as part of the workspace-wide `cargo test --locked` in the `tests` job, in the dev container image.

@@ -195,6 +195,8 @@ itself, using a throwaway Claude config volume so your login is never touched.
 
 CI (`.github/workflows/devcontainer-ci.yml`) runs the container-structure test, the
 smoke test and every tracked `*.bats` file on every push to `main` and every PR.
+CI's Rust jobs also run in this image: the workspace tests, coverage, cargo fmt,
+clippy and the complexity check. A change to the image's toolchain changes CI too.
 
 `token-file-check.bats` tests the token-file mode check in `start.sh` with dummy
 files in temp dirs (including symlinks). It needs no Docker: run it with

@@ -205,8 +205,8 @@ RUN set -eux; \
     rm -rf /tmp/cargo-deny.tar.gz "/tmp/${TOOL_DIR}"; \
     cargo-deny --version
 
-# cargo-llvm-cov: run CI's coverage check locally. Bump together with
-# CARGO_LLVM_COV_VERSION in the coverage job of .github/workflows/devcontainer-ci.yml.
+# cargo-llvm-cov: CI's coverage job runs this copy, and you can run the same check
+# locally. This is the only pin; the workflow has none of its own.
 # Checksums: the asset digests on https://github.com/taiki-e/cargo-llvm-cov/releases/tag/v0.9.1
 ARG CARGO_LLVM_COV_VERSION=0.9.1
 ENV CARGO_LLVM_COV_SHA256_AMD64=3fca950394a3c49457657c158b1619cec8dfd2647ae5b48746734c0ab969a522
