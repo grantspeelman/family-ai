@@ -96,6 +96,21 @@ jobs:
             -v "$PWD:/repo" -w /repo "$IMAGE" \
             clippy --workspace --all-targets --locked -- -D warnings
 
+      # Function complexity for the whole Cargo workspace: clippy's
+      # `cognitive_complexity` lint, denied, with every other clippy lint allowed, so
+      # this step passes or fails on complexity alone. The threshold is set once, in
+      # the root `clippy.toml`. It runs here, after the step above, so it reuses that
+      # step's compiled dependencies instead of building the image again in a job of
+      # its own. `--workspace --all-targets` with no -p flags, so a crate added to
+      # `members` is checked with no change here.
+      - name: Cognitive complexity
+        run: |
+          docker run --rm --entrypoint cargo --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            clippy --workspace --all-targets --locked -- \
+            -A clippy::all -D clippy::cognitive_complexity
+
       # Backstop for commits made outside the container, where the lefthook
       # pre-commit hook does not run.
       - name: Secret scan (full history)
@@ -189,33 +204,46 @@ jobs:
         run: cargo deny --locked check
 
   # The tests of the whole Cargo workspace (every crate in `members`, such as the
-  # registry and fly-mock), then the registry image built from registry/Dockerfile,
-  # started and queried over HTTP. cargo runs in the Dockerfile's `toolchain` stage,
-  # the Rust image the release build starts from, so the Rust tag is set in one place
-  # and no third-party action sets up Rust.
-  registry:
-    name: registry
+  # registry, family app and fly-mock), in the dev container image, so CI and local
+  # development use the same rustup-managed Rust and no third-party action sets up
+  # Rust. `cargo test` at the workspace root with no -p flags, so a crate added to
+  # `members` is tested with no change here. A job of its own, in parallel with the
+  # others, because building the image here and then the registry image would make
+  # the `registry` job the slowest in the run.
+  tests:
+    name: tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
-      REGISTRY_IMAGE: family-ai-registry:ci
+      IMAGE: family-ai-devcontainer:ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Build toolchain image
-        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
+      - name: Build image
+        run: docker build -f .devcontainer/Dockerfile -t "$IMAGE" .
 
-      # `cargo test` at the workspace root with no -p flags, so a crate added to
-      # `members` is tested with no change here. Run as the checkout's owner so
-      # target/ is writable and owned by the runner.
+      # Run as the checkout's owner so target/ is writable and owned by the runner.
       - name: Cargo tests
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
-            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
-            cargo test --locked
+          docker run --rm --entrypoint cargo --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            test --locked
+
+  # The registry image built from registry/Dockerfile, started and queried over HTTP.
+  # The workspace tests run in the `tests` job.
+  registry:
+    name: registry
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      REGISTRY_IMAGE: family-ai-registry:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Build image
         run: docker build -f registry/Dockerfile -t "$REGISTRY_IMAGE" .
@@ -255,21 +283,17 @@ jobs:
           echo "$response"
           jq -e --arg v "$expected" '.data.apiVersion == $v' <<<"$response"
 
-  # Line coverage for the whole Cargo workspace, gated on a floor. cargo runs in
-  # the registry Dockerfile's `toolchain` stage, like the `registry` job, so the
-  # Rust tag is set in one place and no third-party action sets up Rust. rustup
-  # adds llvm-tools-preview for that toolchain's own Rust version. `--workspace`
-  # with no -p flags, so a crate added to `members` is measured with no change here.
+  # Line coverage for the whole Cargo workspace, gated on a floor. cargo and
+  # cargo-llvm-cov run in the dev container image, which ships llvm-tools-preview
+  # and pins cargo-llvm-cov, so the image is the only pin and no third-party action
+  # sets up Rust. `--workspace` with no -p flags, so a crate added to `members` is
+  # measured with no change here.
   coverage:
     name: coverage
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
-      # The asset digest published on the release page. Bump the version together
-      # with CARGO_LLVM_COV_VERSION in .devcontainer/Dockerfile.
-      CARGO_LLVM_COV_VERSION: 0.9.1
-      CARGO_LLVM_COV_SHA256: 3fca950394a3c49457657c158b1619cec8dfd2647ae5b48746734c0ab969a522
+      IMAGE: family-ai-devcontainer:ci
       # Minimum workspace line coverage, in percent. Deliberately generous: it
       # catches a collapse (tests not running, say), not normal drift. main
       # measured 19.61% when this was set. Tighten it later with real data.
@@ -279,16 +303,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install cargo-llvm-cov
-        run: |
-          mkdir -p "$RUNNER_TEMP/cargo-llvm-cov"
-          curl -fsSL --retry 5 -o "$RUNNER_TEMP/cargo-llvm-cov.tar.gz" \
-            "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v${CARGO_LLVM_COV_VERSION}/cargo-llvm-cov-x86_64-unknown-linux-musl.tar.gz"
-          echo "${CARGO_LLVM_COV_SHA256}  $RUNNER_TEMP/cargo-llvm-cov.tar.gz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/cargo-llvm-cov.tar.gz" -C "$RUNNER_TEMP/cargo-llvm-cov" cargo-llvm-cov
-
-      - name: Build toolchain image
-        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
+      - name: Build image
+        run: docker build -f .devcontainer/Dockerfile -t "$IMAGE" .
 
       # Runs the tests once, saves the totals as JSON for the summary step, then
       # prints the per-file table and exits non-zero if line coverage is below
@@ -296,16 +312,13 @@ jobs:
       # owned by the runner.
       - name: Coverage
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
-            -e COVERAGE_FLOOR \
-            -v "$RUNNER_TEMP/cargo-llvm-cov:/opt/cargo-llvm-cov:ro" \
-            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
-            bash -euo pipefail -c '
-              rustup component add llvm-tools-preview
-              cov=/opt/cargo-llvm-cov/cargo-llvm-cov
-              "$cov" llvm-cov --workspace --locked --no-report
-              "$cov" llvm-cov report --json --summary-only --output-path target/llvm-cov-summary.json
-              "$cov" llvm-cov report --summary-only --fail-under-lines "$COVERAGE_FLOOR"
+          docker run --rm --entrypoint bash --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e CARGO_HOME=/tmp/cargo -e COVERAGE_FLOOR \
+            -v "$PWD:/repo" -w /repo "$IMAGE" \
+            -euo pipefail -c '
+              cargo llvm-cov --workspace --locked --no-report
+              cargo llvm-cov report --json --summary-only --output-path target/llvm-cov-summary.json
+              cargo llvm-cov report --summary-only --fail-under-lines "$COVERAGE_FLOOR"
             '
 
       # Runs after a pass or a below-floor failure, so the total is always shown.
@@ -332,39 +345,6 @@ jobs:
             echo "| Floor | ${COVERAGE_FLOOR}% |"
             echo "| Result | $result |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
-
-  # Function complexity for the whole Cargo workspace: clippy's
-  # `cognitive_complexity` lint, denied, with every other clippy lint allowed, so
-  # this job passes or fails on complexity alone. The threshold is set once, in the
-  # root `clippy.toml`. cargo runs in the registry Dockerfile's `toolchain` stage,
-  # like the `registry` job, so the Rust tag is set in one place and no third-party
-  # action sets up Rust. rustup adds clippy for that toolchain's own Rust version.
-  # `--workspace --all-targets` with no -p flags, so a crate added to `members` is
-  # checked with no change here.
-  complexity:
-    name: complexity
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      REGISTRY_TOOLCHAIN_IMAGE: family-ai-registry-toolchain:ci
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Build toolchain image
-        run: docker build -f registry/Dockerfile --target toolchain -t "$REGISTRY_TOOLCHAIN_IMAGE" .
-
-      # Run as the checkout's owner so target/ is writable and owned by the runner.
-      - name: Cognitive complexity
-        run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CARGO_HOME=/tmp/cargo \
-            -v "$PWD:/repo" -w /repo "$REGISTRY_TOOLCHAIN_IMAGE" \
-            bash -euo pipefail -c '
-              rustup component add clippy
-              cargo clippy --workspace --all-targets --locked -- \
-                -A clippy::all -D clippy::cognitive_complexity
-            '
 
   # CPD's Rust lexer scans only tracked Rust files, across all current and future
   # workspace crates. Java and unzip are supplied by the Ubuntu runner image.
@@ -472,7 +452,7 @@ jobs:
     if: always()
     # Every CI job that must pass before merge is listed here. A new job must be
     # added to this list when it is introduced, or it does not gate merging.
-    needs: [image, smoke, workflows, registry, cargo-deny, coverage, duplication, complexity, app]
+    needs: [image, smoke, workflows, tests, registry, cargo-deny, coverage, duplication, app]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

@@ -1,7 +1,7 @@
 # The registry app image. Build from the repo root, which holds the workspace
 # Cargo.toml and Cargo.lock: docker build -f registry/Dockerfile .
-# CI builds the `toolchain` stage and runs the tests in it, so the tests and the
-# release build use the same Rust.
+# CI builds only this file's default target. The workspace tests, coverage and
+# lints run in the dev container image instead.
 # Bump this Rust tag together with RUST_VERSION in .devcontainer/Dockerfile and
 # rust-version in the root Cargo.toml; .devcontainer/rust-version-check.sh fails CI
 # if they differ.
